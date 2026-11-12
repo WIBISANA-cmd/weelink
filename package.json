@@ -8,13 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "setup": "node scripts/setup-yt-dlp.mjs",
+    "setup": "node scripts/setup-yt-dlp.mjs && playwright-core install --only-shell chromium",
     "icons:render": "node scripts/render-icons.mjs",
     "docs:capture": "node scripts/capture-docs.mjs"
   },
   "dependencies": {
     "ffmpeg-static": "^5.3.0",
     "next": "16.4.6",
+    "playwright-core": "1.65.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "simple-icons": "^16.37.0"

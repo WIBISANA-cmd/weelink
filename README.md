@@ -63,7 +63,7 @@ WeeLink membaca link lewat yt-dlp, jadi secara teori [semua situs yang didukung 
 | YouTube | Diuji, berhasil | Video, MP3, dan sampul tersimpan. yt-dlp memakai Node yang menjalankan server sebagai JS runtime. YouTube kadang membalas 403 pada percobaan pertama; server otomatis mencoba sekali lagi. |
 | TikTok | Diuji, berhasil | Pilihan 1080p, 720p, 540p, MP3, dan sampul. |
 | Instagram | Diuji, gagal tanpa cookies | Instagram sering menolak permintaan anonim dari server ("login required"). Isi `YTDLP_COOKIES_FILE` untuk meningkatkan keberhasilan. Pengunjung tetap tidak perlu login. |
-| Threads | Belum terverifikasi | yt-dlp tidak punya ekstraktor Threads. WeeLink mencoba membaca gambar atau video dari tag Open Graph halaman. Belum ada link postingan publik yang berhasil diuji. |
+| Threads | Diuji, berhasil | yt-dlp tidak punya ekstraktor Threads, dan halaman Threads hanya memberi server kerangka kosong karena medianya dimuat oleh JavaScript. WeeLink membuka postingan publik dengan Chromium headless (tanpa login, user agent bawaan) lalu membaca URL video dan foto dari postingan utama, dan mengunduhnya langsung dari CDN Meta. Diuji pada postingan video dan foto: video 720p, MP3, sampul, dan foto ukuran terbesar. Butuh sekitar 3 sampai 5 detik per link. |
 | X, Facebook, Pinterest, Reddit, Vimeo, SoundCloud | Belum diuji | Ditangani yt-dlp. Satu percobaan Vimeo gagal saat pengujian. |
 
 Logo platform di halaman hanya informasi, bukan jaminan. Kalau sebuah link gagal, pengguna melihat penyebabnya (tidak ditemukan, diminta login, ditolak platform, dan seterusnya) beserta langkah berikutnya.
@@ -74,11 +74,11 @@ Kebutuhan: Node.js 20.9 atau lebih baru.
 
 ```bash
 npm install
-npm run setup     # mengunduh binary yt-dlp resmi ke ./bin
+npm run setup     # mengunduh yt-dlp ke ./bin dan Chromium headless untuk Threads
 npm run dev       # http://localhost:3000
 ```
 
-`npm run setup` mengambil build standalone yt-dlp untuk OS kamu (Windows, macOS, Linux x64/arm64), jadi Python tidak diperlukan. ffmpeg ikut terpasang lewat paket `ffmpeg-static`. Kalau npm menahan install script `ffmpeg-static`, jalankan `npm install-scripts approve ffmpeg-static` lalu `npm rebuild ffmpeg-static`, atau isi `FFMPEG_PATH` dengan ffmpeg milik sistem.
+`npm run setup` mengambil build standalone yt-dlp untuk OS kamu (Windows, macOS, Linux x64/arm64), jadi Python tidak diperlukan, lalu memasang Chromium headless (sekitar 280 MB) yang dipakai untuk link Threads. ffmpeg ikut terpasang lewat paket `ffmpeg-static`. Kalau npm menahan install script `ffmpeg-static`, jalankan `npm install-scripts approve ffmpeg-static` lalu `npm rebuild ffmpeg-static`, atau isi `FFMPEG_PATH` dengan ffmpeg milik sistem.
 
 yt-dlp perlu diperbarui berkala karena platform sering berubah. Jalankan `npm run setup` lagi untuk mengambil versi terbaru.
 
@@ -90,7 +90,7 @@ yt-dlp perlu diperbarui berkala karena platform sering berubah. Jalankan `npm ru
 | `npm run build` / `npm start` | Build dan jalankan versi produksi |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Pemeriksaan tipe TypeScript |
-| `npm run setup` | Unduh atau perbarui yt-dlp ke `./bin` |
+| `npm run setup` | Unduh atau perbarui yt-dlp ke `./bin` dan pasang Chromium headless untuk Threads |
 | `npm run icons:render` | Render ikon PWA PNG dari `public/icon.svg` |
 | `npm run docs:capture` | Ambil ulang screenshot dan GIF demo |
 
@@ -104,6 +104,7 @@ Salin `.env.example` ke `.env.local`. Semua variabel opsional.
 | `YTDLP_PATH` | `./bin/yt-dlp`, lalu `yt-dlp` di PATH | Path lengkap ke file program yt-dlp. |
 | `FFMPEG_PATH` | binary dari `ffmpeg-static`, lalu `ffmpeg` di PATH | Path lengkap ke file program ffmpeg. |
 | `YTDLP_COOKIES_FILE` | kosong | File cookies format Netscape untuk yt-dlp. Membantu Instagram. |
+| `THREADS_RENDER` | `1` | Buka link Threads dengan Chromium headless untuk membaca medianya. `0` untuk mematikan (link Threads lalu menampilkan pesan error). |
 | `COMPAT_TRANSCODE` | `1` | Konversi video non-H.264 (VP9, AV1, HEVC) ke MP4 H.264/AAC dan gambar non-JPG/PNG ke JPG, supaya file bisa dibuka di iPhone dan Windows. `0` untuk mengirim file apa adanya. |
 | `MAX_CONCURRENT_JOBS` | `3` | Jumlah proses yt-dlp dan ffmpeg yang boleh berjalan bersamaan; sisanya antre. |
 | `MAX_DURATION_SECONDS` | `10800` | Batas durasi media (3 jam). |
@@ -194,6 +195,7 @@ wee-link/
 │       ├── og-fallback.ts         Baca gambar/video dari tag Open Graph
 │       ├── download.ts            Siapkan file di folder temp lalu stream
 │       ├── media-compat.ts        Cek codec, konversi ke H.264/AAC atau JPG bila perlu
+│       ├── threads.ts             Baca media postingan Threads lewat Chromium headless
 │       ├── process.ts             Antrean proses bersama untuk yt-dlp dan ffmpeg
 │       ├── token.ts               Token bertanda tangan HMAC
 │       ├── url-guard.ts           Tolak URL lokal dan privat
@@ -356,6 +358,7 @@ Wordmark "WeeLink" berupa teks. `app/icon.svg` dan ikon PWA (huruf W di kotak bi
 - **File ditampung di memori browser** sebelum disimpan, supaya progress bisa ditampilkan. Untuk klip media sosial ini tidak masalah, tapi video YouTube yang sangat panjang bisa membebani ponsel dengan RAM kecil.
 - **Rate limit dan antrean ada di memori proses.** Kalau server di-restart, keduanya kembali ke nol, dan dengan beberapa instance batasnya berlaku per instance.
 - **Penjaga SSRF memeriksa nama host, bukan hasil DNS.** Domain publik yang mengarah ke IP privat tidak tertangkap. Jalankan server di jaringan yang tidak bisa menjangkau layanan internal yang sensitif.
+- **Threads bergantung pada tampilan halamannya.** WeeLink membaca postingan utama dari struktur halaman Threads; kalau Meta mengubah tampilannya, pembacaan bisa gagal dan perlu disesuaikan. Ketentuan layanan Meta juga melarang pengambilan data otomatis, jadi IP server bisa saja dibatasi. Matikan dengan `THREADS_RENDER=0` kalau tidak ingin mengambil risiko itu.
 - **Platform berubah-ubah.** Kalau sebuah platform mendadak gagal, langkah pertama selalu memperbarui yt-dlp (`npm run setup`).
 
 ## Memperbarui screenshot dan GIF

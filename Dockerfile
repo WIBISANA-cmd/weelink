@@ -34,6 +34,14 @@ COPY package.json package-lock.json ./
 # Install scripts are skipped: ffmpeg comes from the static image, and Playwright's browser is only for docs.
 RUN npm ci --ignore-scripts
 
+# Headless Chromium for Threads, whose media only appears after its JavaScript runs.
+# Downloaded with the app's own playwright-core CLI so the browser build always matches the library.
+FROM node:${NODE_VERSION}-bookworm-slim AS browser
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+COPY --from=deps /app/node_modules/playwright-core /pw
+RUN node /pw/cli.js install --only-shell chromium \
+  && rm -rf /ms-playwright/ffmpeg-*
+
 FROM node:${NODE_VERSION}-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
@@ -45,11 +53,21 @@ RUN npm run build
 # ---------- Runtime ----------
 FROM node:${NODE_VERSION}-bookworm-slim AS runner
 
+# Chromium's shared libraries only: Playwright's own list for Debian 12, without the xvfb and
+# font packages `--with-deps` adds (about 330 MB) that a page we only read never needs.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends tini ca-certificates \
+  && apt-get install -y --no-install-recommends \
+    tini ca-certificates \
+    libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 libcups2 libdbus-1-3 \
+    libdrm2 libgbm1 libglib2.0-0 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 \
+    libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+    libfontconfig1 libfreetype6 \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /opt/yt-dlp \
   && chown node:node /opt/yt-dlp
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+COPY --from=browser /ms-playwright /ms-playwright
 
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 # Owned by the app user so `yt-dlp -U` in the entrypoint can replace it.
@@ -64,7 +82,8 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     YTDLP_PATH=/opt/yt-dlp/yt-dlp \
     FFMPEG_PATH=/usr/local/bin/ffmpeg \
-    YTDLP_AUTO_UPDATE=1
+    YTDLP_AUTO_UPDATE=1 \
+    THREADS_RENDER=1
 
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static

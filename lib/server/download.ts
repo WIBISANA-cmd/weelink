@@ -43,8 +43,9 @@ async function fetchSource(ticket: DownloadTicket & { s: string }, signal: Abort
   if (!res.ok || !res.body) throw new AppError(res.status === 404 ? "NOT_FOUND" : "UPSTREAM");
 
   const contentType = res.headers.get("content-type")?.split(";")[0].trim() ?? "application/octet-stream";
-  const expected = ticket.m === "image" ? "image/" : ticket.m === "video" ? "video/" : "audio/";
-  if (!contentType.startsWith(expected)) throw new AppError("NO_MEDIA");
+  // MP3 options for direct sources point at the video file; ffmpeg extracts the audio afterwards.
+  const accepted = ticket.m === "image" ? ["image/"] : ticket.m === "video" ? ["video/"] : ["audio/", "video/"];
+  if (!accepted.some((prefix) => contentType.startsWith(prefix))) throw new AppError("NO_MEDIA");
 
   const ext = EXT_BY_TYPE[contentType] ?? (extname(url.pathname).slice(1).toLowerCase() || "bin");
   return { res, body: res.body, contentType, ext };

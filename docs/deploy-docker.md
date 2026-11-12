@@ -33,7 +33,7 @@ Caddy menulis ulang `X-Forwarded-For` dari IP koneksi asli dan membuang nilai ya
 ## Prasyarat
 
 - Docker Engine 24 atau lebih baru, dengan plugin Compose v2 (`docker compose version`).
-- Server Linux amd64 atau arm64. Disarankan minimal 2 GB RAM dan ruang disk kosong 5 GB (image sekitar 700 MB, sisanya untuk file sementara saat memproses video).
+- Server Linux amd64 atau arm64. Disarankan minimal 2 GB RAM dan ruang disk kosong 6 GB (image sekitar 1.2 GB, sisanya untuk file sementara saat memproses video).
 - Port 80 dan 443 terbuka di firewall.
 - Untuk HTTPS: domain atau subdomain dengan record DNS A/AAAA yang mengarah ke IP server.
 
@@ -78,6 +78,7 @@ Semua variabel dibaca dari file `.env` di folder yang sama dengan `docker-compos
 | `YTDLP_AUTO_UPDATE` | `1` | `1` = perbarui yt-dlp setiap container start. `0` = pakai versi dari image apa adanya. |
 | `YTDLP_VERSION` | `latest` | Versi yt-dlp yang dipasang saat build, mis. `2026.10.26`. |
 | `YTDLP_COOKIES_FILE` | kosong | `/app/data/cookies.txt` kalau memakai cookies. Lihat bagian Instagram. |
+| `THREADS_RENDER` | `1` | Buka link Threads dengan Chromium headless yang sudah ada di image. `0` untuk mematikan. |
 | `COMPAT_TRANSCODE` | `1` | Konversi video VP9/AV1/HEVC ke H.264 dan gambar ke JPG agar bisa dibuka di iPhone. Memakai CPU saat konversi. |
 | `MAX_CONCURRENT_JOBS` | `3` | Proses yt-dlp dan ffmpeg bersamaan. Naikkan sesuai jumlah core CPU. |
 | `MAX_DURATION_SECONDS` | `10800` | Batas durasi media (3 jam). |
@@ -274,10 +275,13 @@ Dockerfile memakai beberapa stage supaya image akhir hanya berisi yang dibutuhka
 | `ffmpeg` | `mwader/static-ffmpeg`: hanya file `ffmpeg` statis (sekitar 135 MB) yang diambil |
 | `ytdlp` | Mengunduh build standalone yt-dlp (sudah membawa Python sendiri) sesuai arsitektur |
 | `deps` | `npm ci --ignore-scripts` |
+| `browser` | Mengunduh Chromium headless shell untuk Threads dengan CLI `playwright-core` milik aplikasi, jadi versinya selalu cocok |
 | `build` | `next build` dengan `output: "standalone"` |
 | `runner` | `node:22-bookworm-slim` + tini + hasil dari stage di atas |
 
-Ukuran image akhir sekitar 681 MB (diukur pada build amd64 untuk dokumen ini). Sebagian besar adalah base image Node, ffmpeg, dan yt-dlp.
+Ukuran image akhir sekitar 1.17 GB (diukur pada build amd64 untuk dokumen ini). Bagian terbesar: Chromium headless untuk Threads (sekitar 283 MB) beserta library-nya, base image Node, ffmpeg (135 MB), dan yt-dlp (41 MB). Runtime hanya memasang library yang dibutuhkan Chromium, tanpa xvfb dan paket font dari `--with-deps` (menghemat sekitar 420 MB).
+
+Saat membaca link Threads, Chromium memakai RAM tambahan (container sekitar 220 MB saat diuji). Browser dipakai ulang antar permintaan dan ditutup otomatis setelah 2 menit tidak dipakai.
 
 Detail lain:
 - Proses berjalan sebagai user `node` (uid 1000), bukan root.

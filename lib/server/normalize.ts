@@ -46,7 +46,7 @@ const MP3_BITRATES = [320, 192, 128];
 const MAX_VIDEO_KEYS = 6;
 
 /** Portrait clips report height 1024 for what platforms call 540p, so label by the short side. */
-function ladderLabel(shortSide: number) {
+export function ladderLabel(shortSide: number) {
   return LADDER.reduce((best, step) => (Math.abs(step - shortSide) < Math.abs(best - shortSide) ? step : best));
 }
 
