@@ -101,13 +101,30 @@ Salin `.env.example` ke `.env.local`. Semua variabel opsional.
 | Variabel | Default | Fungsi |
 | --- | --- | --- |
 | `WEELINK_SECRET` | acak per proses | Kunci HMAC untuk token unduhan. Wajib diisi kalau ada lebih dari satu instance server. |
-| `YTDLP_PATH` | `./bin/yt-dlp`, lalu `yt-dlp` di PATH | Lokasi binary yt-dlp. |
-| `FFMPEG_PATH` | binary dari `ffmpeg-static` | Lokasi binary ffmpeg. |
+| `YTDLP_PATH` | `./bin/yt-dlp`, lalu `yt-dlp` di PATH | Path lengkap ke file program yt-dlp. |
+| `FFMPEG_PATH` | binary dari `ffmpeg-static`, lalu `ffmpeg` di PATH | Path lengkap ke file program ffmpeg. |
 | `YTDLP_COOKIES_FILE` | kosong | File cookies format Netscape untuk yt-dlp. Membantu Instagram. |
 | `MAX_CONCURRENT_JOBS` | `3` | Jumlah proses yt-dlp yang boleh berjalan bersamaan; sisanya antre. |
 | `MAX_DURATION_SECONDS` | `10800` | Batas durasi media (3 jam). |
 | `RESOLVE_LIMIT_PER_10_MIN` | `30` | Batas baca link per IP per 10 menit. |
 | `DOWNLOAD_LIMIT_PER_10_MIN` | `30` | Batas unduhan per IP per 10 menit. Pratinjau gambar tidak dihitung. |
+
+### `YTDLP_PATH` dan `FFMPEG_PATH`
+
+Isinya **path lengkap ke file program**, bukan folder. Biasanya cukup dikosongkan:
+
+- `npm run setup` menaruh yt-dlp di `./bin`, dan ffmpeg ikut terpasang lewat paket `ffmpeg-static`. Keduanya ditemukan otomatis.
+- Di Docker, image sudah mengisinya (`/opt/yt-dlp/yt-dlp` dan `/usr/local/bin/ffmpeg`). Jangan diubah.
+
+Isi hanya kalau binary dipasang sendiri di tempat lain:
+
+| OS | `YTDLP_PATH` | `FFMPEG_PATH` |
+| --- | --- | --- |
+| Windows | `C:\tools\yt-dlp.exe` | `C:\ffmpeg\bin\ffmpeg.exe` |
+| Linux | `/usr/local/bin/yt-dlp` | `/usr/bin/ffmpeg` |
+| macOS (Homebrew) | `/opt/homebrew/bin/yt-dlp` | `/opt/homebrew/bin/ffmpeg` |
+
+Cari lokasinya dengan `where yt-dlp` (Windows) atau `which yt-dlp` (Linux/macOS). Cek apakah server menemukan keduanya di `/api/health`.
 
 ## Cara kerja
 
@@ -142,7 +159,8 @@ wee-link/
 ├── app/
 │   ├── api/
 │   │   ├── resolve/route.ts       POST: baca link, kembalikan pilihan unduhan
-│   │   └── download/route.ts      GET: verifikasi token, stream file
+│   │   ├── download/route.ts      GET: verifikasi token, stream file
+│   │   └── health/route.ts        GET: cek yt-dlp dan ffmpeg (healthcheck)
 │   ├── globals.css                Design token, komponen neumorphic, animasi
 │   ├── layout.tsx                 Font, metadata, script tema anti-flash
 │   ├── page.tsx                   Halaman tunggal
@@ -184,9 +202,17 @@ wee-link/
 │   ├── render-icons.mjs           Render ikon PWA PNG
 │   └── capture-docs.mjs           Screenshot dan GIF untuk README
 ├── public/                        icon.svg dan icons/ (PNG PWA)
-├── docs/                          demo.gif dan screenshots/
-├── Dockerfile
-└── .env.example
+├── docker/
+│   ├── entrypoint.sh              Perbarui yt-dlp lalu jalankan server
+│   └── Caddyfile                  Reverse proxy + HTTPS otomatis
+├── docs/
+│   ├── deploy-docker.md           Panduan deploy Docker lengkap
+│   ├── demo.gif
+│   └── screenshots/
+├── Dockerfile                     Build multi-stage, image standalone
+├── docker-compose.yml             weelink + Caddy
+├── .gitattributes                 Paksa LF untuk script shell
+└── .env.example                   Semua variabel beserta penjelasannya
 ```
 
 Aturan pemisahan: semua yang menyentuh proses, file sistem, atau kunci rahasia ada di `lib/server/` dan hanya diimpor oleh route handler. Komponen di `components/` tidak pernah mengimpor dari `lib/server/`.
@@ -221,6 +247,10 @@ Respons sukses (dipersingkat):
 }
 ```
 
+### `GET /api/health`
+
+Membalas `{"status":"ok","ytdlp":"2026.10.26","ffmpeg":true}` dengan status 200, atau 503 kalau yt-dlp atau ffmpeg tidak bisa dijalankan. Dipakai healthcheck Docker.
+
 ### `GET /api/download?t=<token>`
 
 Mengirim file sebagai attachment. Tambahkan `&inline=1` untuk pratinjau gambar. Header `x-file-size` berisi ukuran file untuk progress bar.
@@ -252,18 +282,20 @@ Kedua endpoint membalas error dalam bentuk yang sama:
 
 WeeLink butuh server Node yang bisa menjalankan binary dan menulis ke folder temp. **Vercel dan serverless sejenis tidak cocok**: binary yt-dlp dan ffmpeg besar, unduhan bisa melewati batas waktu fungsi, dan token butuh `WEELINK_SECRET` yang sama di semua instance.
 
-### Docker
+### Docker (disarankan)
+
+Panduan lengkap ada di **[docs/deploy-docker.md](docs/deploy-docker.md)**: HTTPS dengan domain, cookies Instagram, operasional, Nginx, dan troubleshooting. Ringkasnya:
 
 ```bash
-docker build -t weelink .
-docker run -p 3000:3000 -e WEELINK_SECRET=ganti-dengan-string-acak weelink
+cp .env.example .env
+sed -i "s/^WEELINK_SECRET=.*/WEELINK_SECRET=$(openssl rand -hex 32)/" .env
+mkdir -p data
+docker compose up -d --build
 ```
 
-Image memasang ffmpeg dari Debian dan yt-dlp standalone untuk Linux. Untuk memperbarui yt-dlp, build ulang image-nya.
+Stack berisi container `weelink` (Next.js standalone + yt-dlp + ffmpeg statis, user non-root, healthcheck) dan Caddy sebagai reverse proxy dengan HTTPS otomatis. Isi `DOMAIN` di `.env` untuk HTTPS. yt-dlp diperbarui otomatis setiap container start.
 
-> Dockerfile ini belum diuji build di mesin pengembangan project ini. Kalau ada langkah yang gagal, kabari atau buka issue.
-
-### VPS biasa
+### VPS tanpa Docker
 
 ```bash
 npm ci

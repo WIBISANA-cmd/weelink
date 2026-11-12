@@ -1,0 +1,61 @@
+name: weelink
+
+services:
+  weelink:
+    build:
+      context: .
+      args:
+        YTDLP_VERSION: ${YTDLP_VERSION:-latest}
+    image: weelink:latest
+    restart: unless-stopped
+    # Not published to the host: only Caddy may reach it, so X-Forwarded-For always comes from Caddy.
+    expose:
+      - "3000"
+    environment:
+      WEELINK_SECRET: ${WEELINK_SECRET:?Isi WEELINK_SECRET di file .env (lihat .env.example)}
+      YTDLP_AUTO_UPDATE: ${YTDLP_AUTO_UPDATE:-1}
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-3}
+      MAX_DURATION_SECONDS: ${MAX_DURATION_SECONDS:-10800}
+      RESOLVE_LIMIT_PER_10_MIN: ${RESOLVE_LIMIT_PER_10_MIN:-30}
+      DOWNLOAD_LIMIT_PER_10_MIN: ${DOWNLOAD_LIMIT_PER_10_MIN:-30}
+    volumes:
+      # Optional cookies for Instagram. Put the file at ./data/cookies.txt and set
+      # YTDLP_COOKIES_FILE=/app/data/cookies.txt in .env. yt-dlp rewrites it, so it stays writable.
+      - ./data:/app/data
+    deploy:
+      resources:
+        limits:
+          cpus: "${WEELINK_CPUS:-2}"
+          memory: ${WEELINK_MEMORY:-2g}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      weelink:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy-data:
+  caddy-config:

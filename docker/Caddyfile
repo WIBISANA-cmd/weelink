@@ -1,0 +1,20 @@
+# DOMAIN=":80"            -> HTTP biasa di port 80 (untuk tes atau di balik load balancer lain)
+# DOMAIN="weelink.contoh.id" -> HTTPS otomatis dari Let's Encrypt (DNS domain harus mengarah ke server ini)
+{$DOMAIN::80} {
+	encode zstd gzip
+
+	# Caddy menulis X-Forwarded-For dari IP koneksi asli dan membuang nilai kiriman klien,
+	# jadi rate limit per IP di WeeLink tidak bisa dikelabui.
+	reverse_proxy weelink:3000 {
+		# Video panjang bisa butuh beberapa menit sebelum byte pertama dikirim.
+		transport http {
+			response_header_timeout 15m
+		}
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

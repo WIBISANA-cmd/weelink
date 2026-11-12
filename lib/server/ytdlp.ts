@@ -12,7 +12,35 @@ function ytdlpPath() {
 }
 
 export function ffmpegPath() {
-  return process.env.FFMPEG_PATH || ffmpegStatic || "ffmpeg";
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  return ffmpegStatic && existsSync(ffmpegStatic) ? ffmpegStatic : "ffmpeg";
+}
+
+function probe(bin: string, args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(bin, args, { windowsHide: true });
+    let out = "";
+    const timer = setTimeout(() => child.kill("SIGKILL"), 8_000);
+    child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve(null);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve(code === 0 ? out.trim().split("\n")[0] : null);
+    });
+  });
+}
+
+let engineCache: { at: number; status: { ytdlp: string | null; ffmpeg: boolean } } | null = null;
+
+/** Cached for a minute so a health check every few seconds doesn't spawn two processes each time. */
+export async function engineStatus() {
+  if (engineCache && Date.now() - engineCache.at < 60_000) return engineCache.status;
+  const [ytdlp, ffmpeg] = await Promise.all([probe(ytdlpPath(), ["--version"]), probe(ffmpegPath(), ["-version"])]);
+  engineCache = { at: Date.now(), status: { ytdlp, ffmpeg: ffmpeg !== null } };
+  return engineCache.status;
 }
 
 function baseArgs() {

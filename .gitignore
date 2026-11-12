@@ -42,3 +42,6 @@ next-env.d.ts
 
 # yt-dlp binary fetched by npm run setup
 /bin
+
+# Docker runtime data (cookies for yt-dlp)
+/data

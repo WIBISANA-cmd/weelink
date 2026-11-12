@@ -1,0 +1,242 @@
+# Deploy WeeLink dengan Docker
+
+Panduan ini menjalankan WeeLink di server sendiri (VPS atau mesin lokal) dengan Docker Compose: satu container aplikasi, ditambah Caddy sebagai reverse proxy yang juga mengurus HTTPS otomatis.
+
+```
+Internet ──▶ Caddy (:80, :443) ──▶ weelink (:3000, tidak dibuka ke host)
+              HTTPS otomatis          Next.js + yt-dlp + ffmpeg
+              X-Forwarded-For         user non-root, healthcheck
+```
+
+## Daftar isi
+
+- [Kenapa pakai Caddy](#kenapa-pakai-caddy)
+- [Prasyarat](#prasyarat)
+- [Langkah cepat](#langkah-cepat)
+- [Konfigurasi](#konfigurasi)
+- [HTTPS dengan domain sendiri](#https-dengan-domain-sendiri)
+- [Cookies untuk Instagram](#cookies-untuk-instagram)
+- [Operasional sehari-hari](#operasional-sehari-hari)
+- [Memakai Nginx atau proxy sendiri](#memakai-nginx-atau-proxy-sendiri)
+- [Tanpa Compose](#tanpa-compose)
+- [Isi image](#isi-image)
+- [Troubleshooting](#troubleshooting)
+- [Yang sudah diuji](#yang-sudah-diuji)
+
+## Kenapa pakai Caddy
+
+Route handler Next.js tidak bisa melihat IP pengunjung secara langsung. WeeLink membaca IP dari header `X-Forwarded-For` untuk rate limit per IP. Kalau container dibuka langsung ke internet, header itu bisa dipalsukan pengunjung, atau kosong sama sekali sehingga semua pengunjung berbagi satu kuota.
+
+Caddy menulis ulang `X-Forwarded-For` dari IP koneksi asli dan membuang nilai yang dikirim klien. Karena itu, di `docker-compose.yml` container `weelink` sengaja **tidak** dibuka ke host. Satu-satunya jalan masuk adalah lewat Caddy.
+
+## Prasyarat
+
+- Docker Engine 24 atau lebih baru, dengan plugin Compose v2 (`docker compose version`).
+- Server Linux amd64 atau arm64. Disarankan minimal 2 GB RAM dan ruang disk kosong 5 GB (image sekitar 700 MB, sisanya untuk file sementara saat memproses video).
+- Port 80 dan 443 terbuka di firewall.
+- Untuk HTTPS: domain atau subdomain dengan record DNS A/AAAA yang mengarah ke IP server.
+
+## Langkah cepat
+
+```bash
+# 1. Ambil kode
+git clone <url-repo-kamu> weelink
+cd weelink
+
+# 2. Siapkan konfigurasi
+cp .env.example .env
+
+# 3. Isi WEELINK_SECRET dengan string acak (atau edit .env manual)
+sed -i "s/^WEELINK_SECRET=.*/WEELINK_SECRET=$(openssl rand -hex 32)/" .env
+
+# 4. Folder data (untuk cookies opsional)
+mkdir -p data
+
+# 5. Build dan jalankan
+docker compose up -d --build
+```
+
+Build pertama butuh beberapa menit. Setelah selesai:
+
+```bash
+docker compose ps                 # weelink harus "healthy"
+curl http://localhost/api/health  # {"status":"ok","ytdlp":"2026.10.26","ffmpeg":true}
+```
+
+Buka `http://IP-SERVER` di browser.
+
+## Konfigurasi
+
+Semua variabel dibaca dari file `.env` di folder yang sama dengan `docker-compose.yml`.
+
+| Variabel | Default | Keterangan |
+| --- | --- | --- |
+| `WEELINK_SECRET` | wajib | Kunci HMAC token unduhan. Minimal 32 karakter acak. Mengganti nilainya membatalkan semua token yang sedang aktif (paling lama berlaku satu jam). |
+| `DOMAIN` | `:80` | `:80` untuk HTTP biasa. Isi nama domain untuk HTTPS otomatis. |
+| `HTTP_PORT` / `HTTPS_PORT` | `80` / `443` | Port di host. Ubah kalau port itu sudah dipakai, tapi Let's Encrypt butuh 80 dan 443 yang asli. |
+| `YTDLP_AUTO_UPDATE` | `1` | `1` = perbarui yt-dlp setiap container start. `0` = pakai versi dari image apa adanya. |
+| `YTDLP_VERSION` | `latest` | Versi yt-dlp yang dipasang saat build, mis. `2026.10.26`. |
+| `YTDLP_COOKIES_FILE` | kosong | `/app/data/cookies.txt` kalau memakai cookies. Lihat bagian Instagram. |
+| `MAX_CONCURRENT_JOBS` | `3` | Proses yt-dlp bersamaan. Naikkan sesuai jumlah core CPU. |
+| `MAX_DURATION_SECONDS` | `10800` | Batas durasi media (3 jam). |
+| `RESOLVE_LIMIT_PER_10_MIN` | `30` | Batas baca link per IP per 10 menit. |
+| `DOWNLOAD_LIMIT_PER_10_MIN` | `30` | Batas unduhan per IP per 10 menit. |
+| `WEELINK_CPUS` / `WEELINK_MEMORY` | `2` / `2g` | Batas CPU dan RAM container aplikasi. |
+
+`YTDLP_PATH` dan `FFMPEG_PATH` **tidak perlu diisi** di Docker. Image sudah mengaturnya ke `/opt/yt-dlp/yt-dlp` dan `/usr/local/bin/ffmpeg`.
+
+Setelah mengubah `.env`, terapkan dengan:
+
+```bash
+docker compose up -d
+```
+
+## HTTPS dengan domain sendiri
+
+1. Buat record DNS, misalnya `A weelink.contoh.id -> 203.0.113.10`, lalu tunggu sampai `ping weelink.contoh.id` mengarah ke server.
+2. Di `.env`, isi `DOMAIN=weelink.contoh.id`.
+3. Jalankan `docker compose up -d`.
+
+Caddy meminta sertifikat Let's Encrypt saat permintaan pertama dan memperbaruinya otomatis. Sertifikat disimpan di volume `caddy-data`, jadi tetap ada walau container dibuat ulang. Ikuti prosesnya dengan `docker compose logs -f caddy`.
+
+## Cookies untuk Instagram
+
+Instagram sering menolak permintaan anonim dari IP server. Cookies dari akun Instagram (sebaiknya akun khusus, bukan akun pribadi) biasanya membantu. Pengunjung WeeLink tetap tidak perlu login.
+
+1. Ekspor cookies `instagram.com` dalam format Netscape (`cookies.txt`) memakai ekstensi browser yang bisa mengekspor format itu.
+2. Simpan sebagai `data/cookies.txt` di folder project.
+3. yt-dlp memperbarui file ini, jadi container harus bisa menulisnya. Container berjalan sebagai uid 1000:
+   ```bash
+   sudo chown 1000:1000 data data/cookies.txt
+   ```
+4. Di `.env`, isi `YTDLP_COOKIES_FILE=/app/data/cookies.txt`, lalu `docker compose up -d`.
+
+Cookies kedaluwarsa dari waktu ke waktu. Kalau Instagram kembali gagal dengan pesan "meminta login", ekspor ulang.
+
+## Operasional sehari-hari
+
+| Kebutuhan | Perintah |
+| --- | --- |
+| Status dan health | `docker compose ps` |
+| Log aplikasi | `docker compose logs -f weelink` |
+| Log Caddy | `docker compose logs -f caddy` |
+| Cek mesin unduh | `curl http://localhost/api/health` |
+| Perbarui yt-dlp | `docker compose restart weelink` (otomatis kalau `YTDLP_AUTO_UPDATE=1`) |
+| Perbarui aplikasi | `git pull && docker compose up -d --build` |
+| Hentikan | `docker compose down` |
+| Hapus semua termasuk sertifikat | `docker compose down -v` |
+
+**Kapan memperbarui yt-dlp.** Kalau platform tertentu tiba-tiba gagal untuk semua link, penyebab paling umum adalah yt-dlp yang sudah usang. Restart container cukup untuk mengambil versi terbaru. Pembaruan juga bisa gagal (misalnya GitHub tidak bisa dijangkau). Dalam kasus itu container tetap jalan dengan versi bawaan image, dan lognya menulis `pembaruan yt-dlp gagal`.
+
+**Build yang bisa diulang persis.** Untuk produksi yang ketat, kunci versinya:
+
+```bash
+# .env
+YTDLP_VERSION=2026.10.26
+YTDLP_AUTO_UPDATE=0
+```
+
+Versi ffmpeg dan Node bisa dikunci saat build:
+
+```bash
+docker compose build --build-arg FFMPEG_VERSION=7.1.1 --build-arg NODE_VERSION=22
+```
+
+**Yang perlu dibackup.** Hanya `.env` dan `data/`. Aplikasi tidak menyimpan data pengguna. Volume `caddy-data` berisi sertifikat; kalau hilang, Caddy akan meminta sertifikat baru.
+
+## Memakai Nginx atau proxy sendiri
+
+Kalau server sudah punya Nginx, matikan Caddy dan buka WeeLink hanya ke `127.0.0.1`. Buat `docker-compose.override.yml`:
+
+```yaml
+services:
+  weelink:
+    ports:
+      - "127.0.0.1:3000:3000"
+  caddy:
+    profiles: ["disabled"]
+```
+
+Lalu jalankan `docker compose up -d weelink`.
+
+Konfigurasi Nginx (bagian `server`):
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # Timpa, jangan tambahkan ($proxy_add_x_forwarded_for), supaya klien tidak bisa memalsukan IP.
+    proxy_set_header X-Forwarded-For $remote_addr;
+
+    # Video panjang bisa butuh beberapa menit sebelum byte pertama dikirim.
+    proxy_read_timeout 900s;
+    proxy_send_timeout 900s;
+    # Stream file langsung, jangan ditampung dulu di disk Nginx.
+    proxy_buffering off;
+}
+```
+
+Kalau Nginx sendiri berada di balik proxy lain (Cloudflare, load balancer), gunakan modul `real_ip` agar `$remote_addr` berisi IP pengunjung yang asli.
+
+## Tanpa Compose
+
+Untuk tes cepat:
+
+```bash
+docker build -t weelink .
+docker run -d --name weelink -p 3000:3000 \
+  -e WEELINK_SECRET="$(openssl rand -hex 32)" \
+  weelink
+```
+
+Cara ini **tidak disarankan untuk publik**. Tanpa proxy di depannya, header `X-Forwarded-For` kosong atau bisa dipalsukan, sehingga rate limit per IP tidak berfungsi.
+
+## Isi image
+
+Dockerfile memakai beberapa stage supaya image akhir hanya berisi yang dibutuhkan saat berjalan:
+
+| Stage | Isi |
+| --- | --- |
+| `ffmpeg` | `mwader/static-ffmpeg`: hanya file `ffmpeg` statis (sekitar 135 MB) yang diambil |
+| `ytdlp` | Mengunduh build standalone yt-dlp (sudah membawa Python sendiri) sesuai arsitektur |
+| `deps` | `npm ci --ignore-scripts` |
+| `build` | `next build` dengan `output: "standalone"` |
+| `runner` | `node:22-bookworm-slim` + tini + hasil dari stage di atas |
+
+Ukuran image akhir sekitar 681 MB (diukur pada build amd64 untuk dokumen ini). Sebagian besar adalah base image Node, ffmpeg, dan yt-dlp.
+
+Detail lain:
+- Proses berjalan sebagai user `node` (uid 1000), bukan root.
+- `tini` menjadi PID 1, meneruskan sinyal stop dan membersihkan proses yt-dlp yang tersisa.
+- `HEALTHCHECK` memanggil `/api/health`. Endpoint ini menjalankan `yt-dlp --version` dan `ffmpeg -version` (hasilnya disimpan satu menit) dan membalas 503 kalau salah satunya tidak ada. Caddy baru dijalankan setelah aplikasi sehat.
+- File sementara ditulis ke `/tmp` di dalam container dan dihapus begitu respons selesai dikirim atau dibatalkan.
+- `output: "standalone"` hanya aktif saat build Docker (`NEXT_OUTPUT_STANDALONE=1`), jadi `npm start` di luar Docker tetap seperti biasa.
+
+## Troubleshooting
+
+| Gejala | Penyebab dan solusi |
+| --- | --- |
+| `docker compose up` gagal dengan "Isi WEELINK_SECRET" | `.env` belum ada atau `WEELINK_SECRET` kosong. Lihat langkah cepat no. 3. |
+| `weelink` tidak pernah `healthy` | Cek `docker compose logs weelink`. Jalankan `docker compose exec weelink /opt/yt-dlp/yt-dlp --version` untuk memastikan yt-dlp bisa jalan. |
+| Semua link YouTube/TikTok gagal | yt-dlp usang. `docker compose restart weelink`, atau build ulang dengan `--no-cache`. |
+| Instagram selalu "meminta login" | Pasang cookies (lihat bagian Instagram). |
+| Unduhan video panjang terputus | Timeout di proxy lain di depan Caddy, atau RAM container habis. Naikkan `WEELINK_MEMORY` dan timeout proxy. |
+| Muncul "Terlalu banyak permintaan" untuk semua orang | Proxy tidak meneruskan IP asli, jadi semua pengunjung terhitung satu IP. Pastikan lalu lintas lewat Caddy atau Nginx dengan konfigurasi di atas. |
+| Sertifikat HTTPS tidak terbit | DNS belum mengarah ke server, atau port 80/443 tertutup. Lihat `docker compose logs caddy`. |
+| `entrypoint.sh: not found` atau `\r` di log | File script ber-CRLF karena checkout di Windows. Repo menyertakan `.gitattributes` untuk mencegahnya; jalankan `git add --renormalize .` lalu build ulang. |
+| `permission denied` saat menulis cookies | `sudo chown 1000:1000 data data/cookies.txt`. |
+
+## Yang sudah diuji
+
+Diuji pada Docker Desktop 29.8 (Linux engine, amd64), November 2026:
+
+- `docker compose up -d --build` dari nol: kedua container jalan, `weelink` menjadi `healthy`, dan log menunjukkan yt-dlp 2026.10.26 serta ffmpeg 7.1.1.
+- Lewat Caddy di port 80: halaman utama, manifest, dan `/api/health` membalas 200.
+- Unduhan YouTube dan TikTok untuk ketiga mode (MP4, MP3, JPG) berhasil, dan `/tmp` di container kosong setelahnya.
+- Alur penuh di browser (Playwright, viewport ponsel) lewat Caddy: baca link TikTok, pratinjau termuat, simpan MP3, tanpa error console.
+- Rate limit: 32 permintaan dengan `X-Forwarded-For` palsu yang berbeda-beda tetap dibatasi setelah 30, membuktikan Caddy menimpa header dari klien.
+- Proses berjalan sebagai user `node`. `docker compose stop` selesai dalam sekitar 2 detik.
+
+Belum diuji: HTTPS dengan domain sungguhan (butuh DNS publik), server arm64, dan cookies Instagram.
