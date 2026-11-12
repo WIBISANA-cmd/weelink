@@ -1,26 +1,316 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * One surface color for the whole page: neumorphism reads depth from light and
+ * shadow on a single material, so raised = pressable, inset = field or chosen.
+ * Contrast pairs were computed with the WCAG formula (see README, Palet).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --surface: #e3e8f0;
+  --ink: #172033;
+  --muted: #4a5468;
+  --edge: #6e7a90;
+  --primary: #1f56e0;
+  --primary-press: #1946bb;
+  --primary-hi: #3a70ff;
+  --accent-text: #1f56e0;
+  --danger: #a3242a;
+  --shade: 163 174 194;
+  --shade-a: 0.7;
+  --light: 255 255 255;
+  --light-a: 0.95;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1e2430;
+  --ink: #e8ecf3;
+  --muted: #a9b2c3;
+  --edge: #7a8599;
+  --primary: #2f63f0;
+  --primary-press: #234fc9;
+  --primary-hi: #4a7bff;
+  --accent-text: #6f96ff;
+  --danger: #ff9b9b;
+  --shade: 11 14 20;
+  --shade-a: 0.75;
+  --light: 52 61 79;
+  --light-a: 0.6;
+}
+
+:root {
+  --raise: 8px 8px 18px rgb(var(--shade) / var(--shade-a)), -8px -8px 18px rgb(var(--light) / var(--light-a));
+  --raise-sm: 4px 4px 9px rgb(var(--shade) / var(--shade-a)), -4px -4px 9px rgb(var(--light) / var(--light-a));
+  --sink: inset 6px 6px 12px rgb(var(--shade) / var(--shade-a)), inset -6px -6px 12px rgb(var(--light) / var(--light-a));
+  --sink-sm: inset 3px 3px 6px rgb(var(--shade) / var(--shade-a)), inset -3px -3px 6px rgb(var(--light) / var(--light-a));
+  --ease-press: cubic-bezier(0.3, 0.7, 0.4, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-edge: var(--edge);
+  --color-primary: var(--primary);
+  --color-accent: var(--accent-text);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --shadow-raise: var(--raise);
+  --shadow-raise-sm: var(--raise-sm);
+  --shadow-sink: var(--sink);
+  --shadow-sink-sm: var(--sink-sm);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    background: var(--surface);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--surface);
+    color: var(--ink);
+    transition: background-color 300ms ease, color 300ms ease;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: #fff;
+  }
+
+  /* Tailwind preflight resets buttons to the arrow cursor. */
+  a[href],
+  button:not(:disabled),
+  summary,
+  select,
+  label[for],
+  label:has(> input[type="radio"]:not(:disabled)),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 3px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Raised surface control: sinks into the page while pressed. */
+  .neu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    border-radius: 0.875rem;
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: var(--raise-sm);
+    transition:
+      box-shadow 180ms var(--ease-press),
+      transform 180ms var(--ease-press),
+      color 180ms ease;
+  }
+
+  .neu-btn:hover:not(:disabled) {
+    color: var(--accent-text);
+  }
+
+  .neu-btn:active:not(:disabled) {
+    box-shadow: var(--sink-sm);
+    transform: scale(0.98);
+  }
+
+  .neu-btn:disabled {
+    box-shadow: none;
+    color: var(--muted);
+    outline: 1px dashed var(--edge);
+    outline-offset: -1px;
+  }
+
+  /* The one solid-blue control per screen. */
+  .neu-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 3.25rem;
+    border-radius: 1rem;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    box-shadow:
+      var(--raise-sm),
+      inset 2px 2px 3px var(--primary-hi),
+      inset -3px -3px 6px var(--primary-press);
+    transition:
+      box-shadow 180ms var(--ease-press),
+      transform 180ms var(--ease-press),
+      background-color 180ms ease;
+  }
+
+  .neu-primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--primary) 92%, black);
+  }
+
+  .neu-primary:active:not(:disabled) {
+    transform: scale(0.985);
+    box-shadow:
+      inset 4px 4px 8px var(--primary-press),
+      inset -3px -3px 6px var(--primary-hi);
+  }
+
+  .neu-primary:disabled {
+    background: color-mix(in oklab, var(--primary) 70%, var(--surface));
+    box-shadow: var(--sink-sm);
+  }
+
+  /* Busy is not unavailable: keep the solid blue, pressed in, while work runs. */
+  .neu-primary[aria-busy="true"]:disabled {
+    background: var(--primary);
+    box-shadow:
+      inset 4px 4px 8px var(--primary-press),
+      inset -3px -3px 6px var(--primary-hi);
+  }
+
+  /* Recessed slot for text input. The border keeps the field findable at 3:1. */
+  .neu-field {
+    border-radius: 1.125rem;
+    background: var(--surface);
+    box-shadow: var(--sink);
+    border: 1px solid color-mix(in oklab, var(--edge) 55%, transparent);
+    transition: border-color 180ms ease, box-shadow 180ms ease;
+  }
+
+  /* The input itself drops its outline; this ring on the slot replaces it. */
+  .neu-field:focus-within {
+    border-color: var(--accent-text);
+    outline: 2px solid var(--accent-text);
+    outline-offset: 3px;
+  }
+
+  /* Keycap: the identity motif. A chosen key stays pressed in. */
+  .neu-key {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 4.25rem;
+    border-radius: 1rem;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--raise-sm);
+    transition:
+      box-shadow 200ms var(--ease-press),
+      transform 200ms var(--ease-press),
+      color 200ms ease;
+  }
+
+  .neu-key:active {
+    transform: scale(0.97);
+  }
+
+  input:checked + .neu-key {
+    box-shadow: var(--sink);
+    color: var(--accent-text);
+  }
+
+  input:focus-visible + .neu-key {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 3px;
+  }
+
+  .neu-panel {
+    border-radius: 1.75rem;
+    background: var(--surface);
+    box-shadow: var(--raise);
+  }
+
+  .neu-well {
+    border-radius: 1.25rem;
+    background: var(--surface);
+    box-shadow: var(--sink);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+    box-shadow: none;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    box-shadow: var(--raise);
+  }
+}
+
+@keyframes dimple {
+  0%,
+  100% {
+    box-shadow: var(--raise-sm);
+  }
+  50% {
+    box-shadow: var(--sink-sm);
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The result rises out of the page, continuing the motion of the pressed button. */
+.animate-rise {
+  animation: rise 520ms var(--ease-press) both;
+}
+
+.animate-dimple {
+  animation: dimple 1.1s ease-in-out infinite;
+}
+
+.animate-sweep {
+  animation: sweep 1.3s ease-in-out infinite;
+}
+
+.animate-pop {
+  animation: pop 260ms var(--ease-press) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
