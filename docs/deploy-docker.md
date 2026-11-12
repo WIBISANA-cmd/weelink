@@ -17,6 +17,7 @@ Internet ──▶ Caddy (:80, :443) ──▶ weelink (:3000, tidak dibuka ke h
 - [HTTPS dengan domain sendiri](#https-dengan-domain-sendiri)
 - [Cookies untuk Instagram](#cookies-untuk-instagram)
 - [Operasional sehari-hari](#operasional-sehari-hari)
+- [Dokploy](#dokploy)
 - [Memakai Nginx atau proxy sendiri](#memakai-nginx-atau-proxy-sendiri)
 - [Tanpa Compose](#tanpa-compose)
 - [Isi image](#isi-image)
@@ -143,6 +144,76 @@ docker compose build --build-arg FFMPEG_VERSION=7.1.1 --build-arg NODE_VERSION=2
 ```
 
 **Yang perlu dibackup.** Hanya `.env` dan `data/`. Aplikasi tidak menyimpan data pengguna. Volume `caddy-data` berisi sertifikat; kalau hilang, Caddy akan meminta sertifikat baru.
+
+## Dokploy
+
+Dokploy sudah menjalankan Traefik di port 80 dan 443, jadi **jangan pakai `docker-compose.yml` bawaan** (Caddy di dalamnya akan berebut port dengan Traefik). Pilih salah satu cara di bawah. Cara A paling sederhana.
+
+### Cara A: Application (Dockerfile), disarankan
+
+**General**
+- Provider: repo Git kamu, branch yang dipakai.
+- Build Type: `Dockerfile`
+- Docker File: `Dockerfile`
+- Docker Context Path: `.`
+- Docker Build Stage: kosongkan (stage terakhir, `runner`, otomatis dipakai)
+
+**Environment**: cukup ini. Jangan tempel seluruh isi `.env.example`.
+
+```env
+WEELINK_SECRET=isi-64-karakter-acak
+```
+
+Buat nilainya dengan `openssl rand -hex 32`. Variabel lain opsional, tambahkan hanya kalau ingin mengubah default:
+
+```env
+MAX_CONCURRENT_JOBS=3
+MAX_DURATION_SECONDS=10800
+RESOLVE_LIMIT_PER_10_MIN=30
+DOWNLOAD_LIMIT_PER_10_MIN=30
+YTDLP_AUTO_UPDATE=1
+```
+
+**Jangan isi** `YTDLP_PATH`, `FFMPEG_PATH`, `PORT`, `HOSTNAME`, `DOMAIN`, `HTTP_PORT`, `HTTPS_PORT`. Semuanya sudah diatur image atau ditangani Traefik.
+
+**Domains** → Add Domain:
+
+| Field | Isi |
+| --- | --- |
+| Host | `weelink.domainkamu.id` |
+| Path | `/` |
+| Internal Path | kosong |
+| Strip Path | mati |
+| Container Port | `3000` |
+| HTTPS | nyala |
+| Certificate | `letsencrypt` |
+
+**Advanced → Ports**: biarkan kosong. Traefik menjangkau container lewat jaringan internal Dokploy.
+
+Lalu **Deploy**. Build pertama butuh beberapa menit. Domain baru bisa diakses setelah container berstatus sehat (healthcheck memanggil `/api/health`, dengan masa tunggu 40 detik).
+
+### Cara B: Docker Compose
+
+- Compose Path: `./docker-compose.dokploy.yml` (versi tanpa Caddy dan tanpa port host)
+- Environment: sama seperti Cara A.
+- Domains → Add Domain: Service Name `weelink`, Host domainmu, Path `/`, Container Port `3000`, HTTPS nyala, Certificate `letsencrypt`.
+
+Dokploy menambahkan label Traefik dan `dokploy-network` ke service yang dipilih saat deploy. Setiap kali domain diubah, deploy ulang.
+
+### DNS dan Cloudflare
+
+Buat record `A` untuk host tadi ke IP server Dokploy. Kalau domain dikelola Cloudflare, matikan proxy (awan abu-abu, "DNS only") minimal sampai sertifikat Let's Encrypt terbit. Kalau proxy Cloudflare dinyalakan, semua pengunjung terlihat datang dari IP Cloudflare, sehingga rate limit per IP bisa mengenai banyak orang sekaligus. Dalam kasus itu naikkan `RESOLVE_LIMIT_PER_10_MIN` dan `DOWNLOAD_LIMIT_PER_10_MIN`.
+
+### Bad Gateway di Dokploy
+
+Periksa berurutan:
+
+1. **Container Port bukan `3000`.** WeeLink mendengarkan di 3000 (di `0.0.0.0`, jadi bisa dijangkau Traefik).
+2. **Container belum atau tidak sehat.** Buka tab Logs. Log normal berisi `[weelink] yt-dlp 2026.x.x, ffmpeg version 7.1.1` lalu `Ready`. Di tab terminal container, `node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>r.text()).then(console.log)"` harus membalas `"status":"ok"`.
+3. **Variabel kosong yang ikut tersalin.** Image versi lama gagal kalau `YTDLP_PATH=` atau `FFMPEG_PATH=` dikirim kosong (healthcheck 503). Image sekarang sudah kebal terhadap hal ini, tapi sebaiknya tetap hapus baris kosong itu dari Environment.
+4. **Memakai `docker-compose.yml` bawaan.** Ganti ke Cara A, atau ke `docker-compose.dokploy.yml`.
+5. **Ports di Advanced terisi.** Kosongkan, lalu deploy ulang.
+6. **Deploy ulang** setelah setiap perubahan Environment atau Domain.
 
 ## Memakai Nginx atau proxy sendiri
 

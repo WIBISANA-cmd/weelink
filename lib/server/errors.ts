@@ -26,7 +26,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   REFUSED: "Platform menolak permintaan dari server untuk postingan ini, atau postingannya sudah tidak ada. Cek linknya, lalu coba postingan lain.",
   TOO_LONG: "Durasinya melebihi batas server ini. Coba video yang lebih pendek.",
   RATE_LIMITED: "Terlalu banyak permintaan dalam waktu singkat. Tunggu sebentar lalu coba lagi.",
-  ENGINE_MISSING: "Mesin pengunduh belum terpasang di server. Jalankan npm run setup.",
+  ENGINE_MISSING: "Mesin pengunduh (yt-dlp atau ffmpeg) tidak ditemukan di server. Cek /api/health.",
   TOKEN_EXPIRED: "Link unduhan ini sudah kedaluwarsa. Tempel ulang link postingannya.",
   UPSTREAM: "Platform sedang tidak merespons dengan benar. Coba lagi sebentar lagi.",
 };

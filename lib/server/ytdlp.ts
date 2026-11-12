@@ -11,9 +11,10 @@ function ytdlpPath() {
   return existsSync(local) ? local : "yt-dlp";
 }
 
-export function ffmpegPath() {
+/** A real file path, or null to let yt-dlp find ffmpeg on PATH itself. */
+function ffmpegPath(): string | null {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
-  return ffmpegStatic && existsSync(ffmpegStatic) ? ffmpegStatic : "ffmpeg";
+  return ffmpegStatic && existsSync(ffmpegStatic) ? ffmpegStatic : null;
 }
 
 function probe(bin: string, args: string[]): Promise<string | null> {
@@ -38,7 +39,7 @@ let engineCache: { at: number; status: { ytdlp: string | null; ffmpeg: boolean }
 /** Cached for a minute so a health check every few seconds doesn't spawn two processes each time. */
 export async function engineStatus() {
   if (engineCache && Date.now() - engineCache.at < 60_000) return engineCache.status;
-  const [ytdlp, ffmpeg] = await Promise.all([probe(ytdlpPath(), ["--version"]), probe(ffmpegPath(), ["-version"])]);
+  const [ytdlp, ffmpeg] = await Promise.all([probe(ytdlpPath(), ["--version"]), probe(ffmpegPath() ?? "ffmpeg", ["-version"])]);
   engineCache = { at: Date.now(), status: { ytdlp, ffmpeg: ffmpeg !== null } };
   return engineCache.status;
 }
@@ -46,8 +47,11 @@ export async function engineStatus() {
 function baseArgs() {
   // Instagram often refuses anonymous server requests; an operator-supplied cookies file helps. Visitors never log in.
   const cookies = process.env.YTDLP_COOKIES_FILE ? ["--cookies", process.env.YTDLP_COOKIES_FILE] : [];
+  // --ffmpeg-location needs a path; a bare "ffmpeg" makes yt-dlp report it missing.
+  const ffmpeg = ffmpegPath();
   return [
     ...cookies,
+    ...(ffmpeg ? ["--ffmpeg-location", ffmpeg] : []),
     "--ignore-config",
     "--no-progress",
     "--no-warnings",
@@ -56,8 +60,6 @@ function baseArgs() {
     // YouTube needs a JS runtime to solve its player challenge; reuse the Node running this server.
     "--js-runtimes",
     `node:${process.execPath}`,
-    "--ffmpeg-location",
-    ffmpegPath(),
   ];
 }
 
@@ -81,6 +83,8 @@ function release() {
 
 export function mapYtdlpError(stderr: string): AppError {
   const text = stderr.toLowerCase();
+  // Checked first: "ffmpeg not found" would otherwise read as a missing post.
+  if (/ffmpeg (and ffprobe )?not found|ffprobe and ffmpeg not found/.test(text)) return new AppError("ENGINE_MISSING");
   if (text.includes("unsupported url")) return new AppError("UNSUPPORTED");
   if (/no video (formats )?(found|in this post)|there is no video/.test(text)) return new AppError("NO_MEDIA");
   if (/login|log in|sign in|cookies|rate-limit|confirm you.?re not a bot/.test(text)) {

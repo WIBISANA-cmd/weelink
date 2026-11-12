@@ -211,6 +211,7 @@ wee-link/
 │   └── screenshots/
 ├── Dockerfile                     Build multi-stage, image standalone
 ├── docker-compose.yml             weelink + Caddy
+├── docker-compose.dokploy.yml     weelink saja, untuk Dokploy/Traefik
 ├── .gitattributes                 Paksa LF untuk script shell
 └── .env.example                   Semua variabel beserta penjelasannya
 ```
@@ -284,7 +285,7 @@ WeeLink butuh server Node yang bisa menjalankan binary dan menulis ke folder tem
 
 ### Docker (disarankan)
 
-Panduan lengkap ada di **[docs/deploy-docker.md](docs/deploy-docker.md)**: HTTPS dengan domain, cookies Instagram, operasional, Nginx, dan troubleshooting. Ringkasnya:
+Panduan lengkap ada di **[docs/deploy-docker.md](docs/deploy-docker.md)**: HTTPS dengan domain, **Dokploy**, cookies Instagram, operasional, Nginx, dan troubleshooting. Ringkasnya:
 
 ```bash
 cp .env.example .env

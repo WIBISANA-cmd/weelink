@@ -54,6 +54,8 @@ RUN apt-get update \
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 # Owned by the app user so `yt-dlp -U` in the entrypoint can replace it.
 COPY --from=ytdlp --chown=node:node /yt-dlp /opt/yt-dlp/yt-dlp
+# Also on PATH, so a platform that passes YTDLP_PATH="" (e.g. a pasted .env) still finds it.
+RUN ln -s /opt/yt-dlp/yt-dlp /usr/local/bin/yt-dlp
 
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -67,7 +69,9 @@ ENV NODE_ENV=production \
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
-COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/weelink-entrypoint
+# chmod in a RUN step instead of COPY --chmod, which older non-BuildKit builders reject.
+COPY docker/entrypoint.sh /usr/local/bin/weelink-entrypoint
+RUN chmod 755 /usr/local/bin/weelink-entrypoint
 
 USER node
 EXPOSE 3000
