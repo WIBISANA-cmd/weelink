@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     // Previews are small thumbnails shown on every result, so only real downloads count.
     if (!inline) rateLimit(request, "download", envNumber("DOWNLOAD_LIMIT_PER_10_MIN", 30));
 
-    const file = await prepareFile(ticket, request.signal);
+    const file = await prepareFile(ticket, request.signal, inline);
     const headers = new Headers({
       "content-type": file.contentType,
       "content-disposition": contentDisposition(file.filename, inline),

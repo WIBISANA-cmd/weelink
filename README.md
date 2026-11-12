@@ -48,7 +48,7 @@ Desktop memakai dua kolom: form tetap di kiri, hasil di kanan.
 - **Kualitas bebas dipilih.** Video sesuai resolusi yang tersedia di sumber (misalnya 1080p, 720p, 540p). Audio dikonversi ke MP3 320, 192, atau 128 kbps. Gambar asli, atau sampul untuk video.
 - **Perkiraan ukuran file**, kalau sumbernya melaporkan ukuran.
 - **Carousel** (beberapa item dalam satu postingan) bisa dipilih per item.
-- **Video yang bisa diputar di galeri ponsel.** Server memilih H.264 + AAC dalam MP4 kalau tersedia di resolusi yang dipilih.
+- **File yang bisa dibuka di semua perangkat, termasuk iPhone.** Server memilih H.264 + AAC kalau tersedia. Kalau platform hanya memberi VP9, AV1, atau HEVC (sering terjadi di Instagram, Threads, dan TikTok resolusi tinggi), video dikonversi ke MP4 H.264/AAC. Gambar WebP/HEIC dikonversi ke JPG. File yang ternyata bukan media ditolak dengan pesan error, bukan disimpan sebagai file rusak.
 - **Progress unduhan** di dalam tombol Simpan, dan bisa dibatalkan.
 - **Bagikan ke WeeLink.** Setelah dipasang sebagai aplikasi (PWA) di Android, WeeLink muncul di menu Bagikan aplikasi lain.
 - **Mode terang dan gelap**, mengikuti sistem secara default, dengan toggle yang tersimpan per perangkat.
@@ -104,7 +104,8 @@ Salin `.env.example` ke `.env.local`. Semua variabel opsional.
 | `YTDLP_PATH` | `./bin/yt-dlp`, lalu `yt-dlp` di PATH | Path lengkap ke file program yt-dlp. |
 | `FFMPEG_PATH` | binary dari `ffmpeg-static`, lalu `ffmpeg` di PATH | Path lengkap ke file program ffmpeg. |
 | `YTDLP_COOKIES_FILE` | kosong | File cookies format Netscape untuk yt-dlp. Membantu Instagram. |
-| `MAX_CONCURRENT_JOBS` | `3` | Jumlah proses yt-dlp yang boleh berjalan bersamaan; sisanya antre. |
+| `COMPAT_TRANSCODE` | `1` | Konversi video non-H.264 (VP9, AV1, HEVC) ke MP4 H.264/AAC dan gambar non-JPG/PNG ke JPG, supaya file bisa dibuka di iPhone dan Windows. `0` untuk mengirim file apa adanya. |
+| `MAX_CONCURRENT_JOBS` | `3` | Jumlah proses yt-dlp dan ffmpeg yang boleh berjalan bersamaan; sisanya antre. |
 | `MAX_DURATION_SECONDS` | `10800` | Batas durasi media (3 jam). |
 | `RESOLVE_LIMIT_PER_10_MIN` | `30` | Batas baca link per IP per 10 menit. |
 | `DOWNLOAD_LIMIT_PER_10_MIN` | `30` | Batas unduhan per IP per 10 menit. Pratinjau gambar tidak dihitung. |
@@ -192,6 +193,8 @@ wee-link/
 │       ├── normalize.ts           Output yt-dlp menjadi pilihan kualitas
 │       ├── og-fallback.ts         Baca gambar/video dari tag Open Graph
 │       ├── download.ts            Siapkan file di folder temp lalu stream
+│       ├── media-compat.ts        Cek codec, konversi ke H.264/AAC atau JPG bila perlu
+│       ├── process.ts             Antrean proses bersama untuk yt-dlp dan ffmpeg
 │       ├── token.ts               Token bertanda tangan HMAC
 │       ├── url-guard.ts           Tolak URL lokal dan privat
 │       ├── rate-limit.ts          Batas permintaan per IP (di memori)

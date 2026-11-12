@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import { AppError } from "./errors";
-import { envNumber } from "./env";
+import { runQueued } from "./process";
 
 function ytdlpPath() {
   if (process.env.YTDLP_PATH) return process.env.YTDLP_PATH;
@@ -34,12 +34,17 @@ function probe(bin: string, args: string[]): Promise<string | null> {
   });
 }
 
+/** What to spawn when running ffmpeg directly. */
+export function ffmpegBin() {
+  return ffmpegPath() ?? "ffmpeg";
+}
+
 let engineCache: { at: number; status: { ytdlp: string | null; ffmpeg: boolean } } | null = null;
 
 /** Cached for a minute so a health check every few seconds doesn't spawn two processes each time. */
 export async function engineStatus() {
   if (engineCache && Date.now() - engineCache.at < 60_000) return engineCache.status;
-  const [ytdlp, ffmpeg] = await Promise.all([probe(ytdlpPath(), ["--version"]), probe(ffmpegPath() ?? "ffmpeg", ["-version"])]);
+  const [ytdlp, ffmpeg] = await Promise.all([probe(ytdlpPath(), ["--version"]), probe(ffmpegBin(), ["-version"])]);
   engineCache = { at: Date.now(), status: { ytdlp, ffmpeg: ffmpeg !== null } };
   return engineCache.status;
 }
@@ -63,24 +68,6 @@ function baseArgs() {
   ];
 }
 
-const MAX_JOBS = envNumber("MAX_CONCURRENT_JOBS", 3);
-let running = 0;
-const queue: Array<() => void> = [];
-
-async function acquire() {
-  if (running < MAX_JOBS) {
-    running++;
-    return;
-  }
-  await new Promise<void>((resolve) => queue.push(resolve));
-  running++;
-}
-
-function release() {
-  running--;
-  queue.shift()?.();
-}
-
 export function mapYtdlpError(stderr: string): AppError {
   const text = stderr.toLowerCase();
   // Checked first: "ffmpeg not found" would otherwise read as a missing post.
@@ -97,44 +84,10 @@ export function mapYtdlpError(stderr: string): AppError {
   return new AppError("UPSTREAM");
 }
 
-interface RunOptions {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}
-
 /** Runs yt-dlp without a shell, so the user-supplied URL is never parsed as a command. */
-export async function runYtdlp(args: string[], { signal, timeoutMs = 120_000 }: RunOptions = {}) {
-  await acquire();
-  try {
-    return await new Promise<string>((resolve, reject) => {
-      const child = spawn(ytdlpPath(), [...baseArgs(), ...args], { windowsHide: true });
-      const out: Buffer[] = [];
-      let err = "";
-
-      const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
-      const onAbort = () => child.kill("SIGKILL");
-      signal?.addEventListener("abort", onAbort, { once: true });
-
-      child.stdout.on("data", (chunk: Buffer) => out.push(chunk));
-      child.stderr.on("data", (chunk: Buffer) => {
-        err = (err + chunk.toString()).slice(-8000);
-      });
-
-      child.on("error", (error: NodeJS.ErrnoException) => {
-        clearTimeout(timer);
-        reject(error.code === "ENOENT" ? new AppError("ENGINE_MISSING") : error);
-      });
-
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-        if (code === 0) return resolve(Buffer.concat(out).toString("utf8"));
-        if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
-        if (err) console.warn("[weelink] yt-dlp:", err.trim().split("\n").slice(-3).join(" | "));
-        reject(mapYtdlpError(err));
-      });
-    });
-  } finally {
-    release();
-  }
+export async function runYtdlp(args: string[], options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
+  const result = await runQueued(ytdlpPath(), [...baseArgs(), ...args], options);
+  if (result.code === 0) return result.stdout;
+  if (result.stderr) console.warn("[weelink] yt-dlp:", result.stderr.trim().split("\n").slice(-3).join(" | "));
+  throw mapYtdlpError(result.stderr);
 }

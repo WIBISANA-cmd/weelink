@@ -78,7 +78,8 @@ Semua variabel dibaca dari file `.env` di folder yang sama dengan `docker-compos
 | `YTDLP_AUTO_UPDATE` | `1` | `1` = perbarui yt-dlp setiap container start. `0` = pakai versi dari image apa adanya. |
 | `YTDLP_VERSION` | `latest` | Versi yt-dlp yang dipasang saat build, mis. `2026.10.26`. |
 | `YTDLP_COOKIES_FILE` | kosong | `/app/data/cookies.txt` kalau memakai cookies. Lihat bagian Instagram. |
-| `MAX_CONCURRENT_JOBS` | `3` | Proses yt-dlp bersamaan. Naikkan sesuai jumlah core CPU. |
+| `COMPAT_TRANSCODE` | `1` | Konversi video VP9/AV1/HEVC ke H.264 dan gambar ke JPG agar bisa dibuka di iPhone. Memakai CPU saat konversi. |
+| `MAX_CONCURRENT_JOBS` | `3` | Proses yt-dlp dan ffmpeg bersamaan. Naikkan sesuai jumlah core CPU. |
 | `MAX_DURATION_SECONDS` | `10800` | Batas durasi media (3 jam). |
 | `RESOLVE_LIMIT_PER_10_MIN` | `30` | Batas baca link per IP per 10 menit. |
 | `DOWNLOAD_LIMIT_PER_10_MIN` | `30` | Batas unduhan per IP per 10 menit. |

@@ -59,19 +59,27 @@ function shortSide(f: { width?: number | null; height?: number | null }) {
   return f.height ?? f.width ?? 0;
 }
 
+/** Cuts by code point: slicing UTF-16 can split an emoji, and a lone surrogate breaks encodeURIComponent. */
+export function clip(text: string, max: number) {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max - 3).join("")}...` : text;
+}
+
 export function safeFilename(name: string, fallback: string) {
-  const cleaned = name
-    .replace(/[\u0000-\u001f\u007f<>:"/\\|?*#]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
+  const cleaned = Array.from(
+    name
+      .replace(/[\u0000-\u001f\u007f<>:"/\\|?*#]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  )
     .slice(0, 80)
+    .join("")
     .trim();
   return cleaned || fallback;
 }
 
 function titleOf(info: YtInfo, platformName: string) {
-  const raw = info.title || info.description?.split("\n")[0] || `Postingan ${platformName}`;
-  return raw.length > 140 ? `${raw.slice(0, 137)}...` : raw;
+  return clip(info.title || info.description?.split("\n")[0] || `Postingan ${platformName}`, 140);
 }
 
 function previewUrl(sourceUrl: string, image: string | undefined) {

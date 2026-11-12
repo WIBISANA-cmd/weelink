@@ -1,6 +1,6 @@
 import type { PlatformId } from "@/lib/platforms";
 import type { DownloadOption, MediaInfo } from "@/lib/types";
-import { safeFilename } from "./normalize";
+import { clip, safeFilename } from "./normalize";
 import { issueTicket } from "./token";
 import { assertPublicUrl } from "./url-guard";
 
@@ -73,7 +73,7 @@ export async function resolveFromOpenGraph(sourceUrl: string, platform: Platform
   const video = publicOrNull(meta.get("og:video:secure_url") ?? meta.get("og:video"));
   if (!image && !video) return null;
 
-  const title = (meta.get("og:title") ?? meta.get("og:description") ?? `Postingan ${platformName}`).slice(0, 140);
+  const title = clip(meta.get("og:title") ?? meta.get("og:description") ?? `Postingan ${platformName}`, 140);
   const n = safeFilename(`${title} - ${platformName}`, "weelink");
   const options: DownloadOption[] = [];
 
