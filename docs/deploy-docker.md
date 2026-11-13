@@ -15,7 +15,7 @@ Internet ──▶ Caddy (:80, :443) ──▶ weelink (:3000, tidak dibuka ke h
 - [Langkah cepat](#langkah-cepat)
 - [Konfigurasi](#konfigurasi)
 - [HTTPS dengan domain sendiri](#https-dengan-domain-sendiri)
-- [Cookies untuk Instagram](#cookies-untuk-instagram)
+- [Cookies untuk YouTube dan Instagram](#cookies-untuk-youtube-dan-instagram)
 - [Operasional sehari-hari](#operasional-sehari-hari)
 - [Dokploy](#dokploy)
 - [Memakai Nginx atau proxy sendiri](#memakai-nginx-atau-proxy-sendiri)
@@ -77,7 +77,7 @@ Semua variabel dibaca dari file `.env` di folder yang sama dengan `docker-compos
 | `HTTP_PORT` / `HTTPS_PORT` | `80` / `443` | Port di host. Ubah kalau port itu sudah dipakai, tapi Let's Encrypt butuh 80 dan 443 yang asli. |
 | `YTDLP_AUTO_UPDATE` | `1` | `1` = perbarui yt-dlp setiap container start. `0` = pakai versi dari image apa adanya. |
 | `YTDLP_VERSION` | `latest` | Versi yt-dlp yang dipasang saat build, mis. `2026.10.26`. |
-| `YTDLP_COOKIES_FILE` | kosong | `/app/data/cookies.txt` kalau memakai cookies. Lihat bagian Instagram. |
+| `YTDLP_COOKIES_FILE` | kosong | `/app/data/cookies.txt` kalau memakai cookies. Lihat bagian Cookies untuk YouTube dan Instagram. |
 | `THREADS_RENDER` | `1` | Buka link Threads dengan Chromium headless yang sudah ada di image. `0` untuk mematikan. |
 | `COMPAT_TRANSCODE` | `1` | Konversi video VP9/AV1/HEVC ke H.264 dan gambar ke JPG agar bisa dibuka di iPhone. Memakai CPU saat konversi. |
 | `MAX_CONCURRENT_JOBS` | `3` | Proses yt-dlp dan ffmpeg bersamaan. Naikkan sesuai jumlah core CPU. |
@@ -102,19 +102,35 @@ docker compose up -d
 
 Caddy meminta sertifikat Let's Encrypt saat permintaan pertama dan memperbaruinya otomatis. Sertifikat disimpan di volume `caddy-data`, jadi tetap ada walau container dibuat ulang. Ikuti prosesnya dengan `docker compose logs -f caddy`.
 
-## Cookies untuk Instagram
+## Cookies untuk YouTube dan Instagram
 
-Instagram sering menolak permintaan anonim dari IP server. Cookies dari akun Instagram (sebaiknya akun khusus, bukan akun pribadi) biasanya membantu. Pengunjung WeeLink tetap tidak perlu login.
+YouTube dan Instagram sering menolak permintaan dari IP server (VPS, pusat data), padahal dari IP rumahan link yang sama berhasil. Tandanya di log aplikasi:
 
-1. Ekspor cookies `instagram.com` dalam format Netscape (`cookies.txt`) memakai ekstensi browser yang bisa mengekspor format itu.
-2. Simpan sebagai `data/cookies.txt` di folder project.
-3. yt-dlp memperbarui file ini, jadi container harus bisa menulisnya. Container berjalan sebagai uid 1000:
-   ```bash
-   sudo chown 1000:1000 data data/cookies.txt
-   ```
-4. Di `.env`, isi `YTDLP_COOKIES_FILE=/app/data/cookies.txt`, lalu `docker compose up -d`.
+- YouTube: `Sign in to confirm you're not a bot`, dan WeeLink menulis `[weelink] YouTube menolak IP server ini sebagai bot`. Pengunjung melihat "YouTube sedang menolak permintaan dari server WeeLink".
+- Instagram: `login required` atau `rate-limit`. Pengunjung melihat "Platform meminta login".
 
-Cookies kedaluwarsa dari waktu ke waktu. Kalau Instagram kembali gagal dengan pesan "meminta login", ekspor ulang.
+Solusi yang dianjurkan yt-dlp adalah cookies dari akun yang login. Pengunjung WeeLink tetap tidak perlu login; cookies hanya dipakai server.
+
+**Menyiapkan file cookies**
+
+1. Pakai **akun khusus**, bukan akun pribadimu. Platform bisa membatasi akun yang dipakai server.
+2. Buka jendela privat/incognito, login ke `youtube.com` (dan `instagram.com` kalau perlu) di jendela itu.
+3. Ekspor cookies dalam format Netscape (`cookies.txt`) dengan ekstensi browser yang bisa mengekspor format itu. Cookies kedua situs boleh digabung dalam satu file.
+4. Tutup jendela privat itu tanpa logout. Kalau sesi yang sama terus dipakai di browser, YouTube merotasi cookies dan file ekspor cepat kedaluwarsa.
+
+File boleh read-only: WeeLink menyalin cookies ke file sementara untuk setiap proses yt-dlp, jadi file aslimu tidak pernah diubah.
+
+**Docker Compose**
+
+Simpan sebagai `data/cookies.txt`, lalu di `.env` isi `YTDLP_COOKIES_FILE=/app/data/cookies.txt` dan jalankan `docker compose up -d`.
+
+**Dokploy (Application)**
+
+1. Advanced, bagian Volumes, tambahkan **File Mount**: Mount Path `/app/data/cookies.txt`, Content diisi seluruh isi `cookies.txt`.
+2. Environment: tambahkan `YTDLP_COOKIES_FILE=/app/data/cookies.txt`.
+3. Deploy ulang.
+
+Cek hasilnya di tab Logs: baris `YTDLP_COOKIES_FILE tidak bisa dibaca` berarti path-nya salah. Cookies kedaluwarsa dari waktu ke waktu; kalau pesan penolakan muncul lagi, ekspor ulang dan ganti isi File Mount.
 
 ## Operasional sehari-hari
 
@@ -297,12 +313,11 @@ Detail lain:
 | `docker compose up` gagal dengan "Isi WEELINK_SECRET" | `.env` belum ada atau `WEELINK_SECRET` kosong. Lihat langkah cepat no. 3. |
 | `weelink` tidak pernah `healthy` | Cek `docker compose logs weelink`. Jalankan `docker compose exec weelink /opt/yt-dlp/yt-dlp --version` untuk memastikan yt-dlp bisa jalan. |
 | Semua link YouTube/TikTok gagal | yt-dlp usang. `docker compose restart weelink`, atau build ulang dengan `--no-cache`. |
-| Instagram selalu "meminta login" | Pasang cookies (lihat bagian Instagram). |
+| YouTube "menolak permintaan dari server" atau Instagram "meminta login" | IP server diblokir platform. Pasang cookies (lihat bagian Cookies untuk YouTube dan Instagram). |
 | Unduhan video panjang terputus | Timeout di proxy lain di depan Caddy, atau RAM container habis. Naikkan `WEELINK_MEMORY` dan timeout proxy. |
 | Muncul "Terlalu banyak permintaan" untuk semua orang | Proxy tidak meneruskan IP asli, jadi semua pengunjung terhitung satu IP. Pastikan lalu lintas lewat Caddy atau Nginx dengan konfigurasi di atas. |
 | Sertifikat HTTPS tidak terbit | DNS belum mengarah ke server, atau port 80/443 tertutup. Lihat `docker compose logs caddy`. |
 | `entrypoint.sh: not found` atau `\r` di log | File script ber-CRLF karena checkout di Windows. Repo menyertakan `.gitattributes` untuk mencegahnya; jalankan `git add --renormalize .` lalu build ulang. |
-| `permission denied` saat menulis cookies | `sudo chown 1000:1000 data data/cookies.txt`. |
 
 ## Yang sudah diuji
 

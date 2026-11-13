@@ -70,7 +70,9 @@ export async function resolveFromOpenGraph(sourceUrl: string, platform: Platform
 
   const meta = readMeta(html);
   const image = publicOrNull(meta.get("og:image") ?? meta.get("twitter:image"));
-  const video = publicOrNull(meta.get("og:video:secure_url") ?? meta.get("og:video"));
+  // og:video is often an HTML player (YouTube's is an /embed/ page with og:video:type text/html), not a file.
+  const videoType = meta.get("og:video:type");
+  const video = !videoType || videoType.startsWith("video/") ? publicOrNull(meta.get("og:video:secure_url") ?? meta.get("og:video")) : undefined;
   if (!image && !video) return null;
 
   const title = clip(meta.get("og:title") ?? meta.get("og:description") ?? `Postingan ${platformName}`, 140);

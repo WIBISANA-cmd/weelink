@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import { AppError } from "./errors";
@@ -49,13 +52,34 @@ export async function engineStatus() {
   return engineCache.status;
 }
 
+/**
+ * YouTube and Instagram often refuse anonymous requests from server IPs; an operator-supplied cookies
+ * file helps (visitors never log in). yt-dlp rewrites that file on exit and crashes when it can't,
+ * which a read-only mount (Dokploy File Mounts) would cause, so every run gets its own writable copy.
+ */
+async function withCookies<T>(run: (cookieArgs: string[]) => Promise<T>): Promise<T> {
+  const source = process.env.YTDLP_COOKIES_FILE;
+  if (!source) return run([]);
+
+  const copy = join(tmpdir(), `weelink-cookies-${randomUUID()}.txt`);
+  try {
+    // Read and write instead of copyFile, which would carry over the source's read-only mode.
+    await writeFile(copy, await readFile(source), { mode: 0o600 });
+  } catch (error) {
+    console.warn(`[weelink] YTDLP_COOKIES_FILE tidak bisa dibaca (${source}):`, error instanceof Error ? error.message : error);
+    return run([]);
+  }
+  try {
+    return await run(["--cookies", copy]);
+  } finally {
+    await rm(copy, { force: true });
+  }
+}
+
 function baseArgs() {
-  // Instagram often refuses anonymous server requests; an operator-supplied cookies file helps. Visitors never log in.
-  const cookies = process.env.YTDLP_COOKIES_FILE ? ["--cookies", process.env.YTDLP_COOKIES_FILE] : [];
   // --ffmpeg-location needs a path; a bare "ffmpeg" makes yt-dlp report it missing.
   const ffmpeg = ffmpegPath();
   return [
-    ...cookies,
     ...(ffmpeg ? ["--ffmpeg-location", ffmpeg] : []),
     "--ignore-config",
     "--no-progress",
@@ -70,11 +94,20 @@ function baseArgs() {
 
 export function mapYtdlpError(stderr: string): AppError {
   const text = stderr.toLowerCase();
+  // A yt-dlp crash, not a platform answer; its file paths (e.g. ".../cookies.py") must not match the patterns below.
+  if (text.includes("traceback (most recent call last)") || text.includes("failed to execute script")) {
+    return new AppError("UPSTREAM");
+  }
   // Checked first: "ffmpeg not found" would otherwise read as a missing post.
   if (/ffmpeg (and ffprobe )?not found|ffprobe and ffmpeg not found/.test(text)) return new AppError("ENGINE_MISSING");
   if (text.includes("unsupported url")) return new AppError("UNSUPPORTED");
   if (/no video (formats )?(found|in this post)|there is no video/.test(text)) return new AppError("NO_MEDIA");
-  if (/login|log in|sign in|cookies|rate-limit|confirm you.?re not a bot/.test(text)) {
+  // YouTube's check on datacenter IPs. Nothing the visitor can fix, so say so; the operator gets a log hint.
+  if (/confirm you.?re not a bot/.test(text)) {
+    console.warn("[weelink] YouTube menolak IP server ini sebagai bot. Pasang cookies akun lewat YTDLP_COOKIES_FILE (lihat docs/deploy-docker.md, bagian YouTube).");
+    return new AppError("REFUSED", "YouTube sedang menolak permintaan dari server WeeLink. Coba lagi beberapa saat lagi.");
+  }
+  if (/login|log in|sign in|--cookies|rate-limit/.test(text)) {
     return new AppError("LOGIN_REQUIRED");
   }
   if (/ip address is blocked|not available in your country|geo.?restrict/.test(text)) return new AppError("REFUSED");
@@ -86,7 +119,7 @@ export function mapYtdlpError(stderr: string): AppError {
 
 /** Runs yt-dlp without a shell, so the user-supplied URL is never parsed as a command. */
 export async function runYtdlp(args: string[], options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
-  const result = await runQueued(ytdlpPath(), [...baseArgs(), ...args], options);
+  const result = await withCookies((cookieArgs) => runQueued(ytdlpPath(), [...cookieArgs, ...baseArgs(), ...args], options));
   if (result.code === 0) return result.stdout;
   if (result.stderr) console.warn("[weelink] yt-dlp:", result.stderr.trim().split("\n").slice(-3).join(" | "));
   throw mapYtdlpError(result.stderr);
