@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ApiErrorBody } from "@/lib/types";
 
 export type DownloadState =
   | { status: "idle" }
   | { status: "preparing" }
   | { status: "receiving"; progress: number | null }
-  | { status: "done"; filename: string }
+  /** `file` stays in memory so it can go to the share sheet (Save to Photos on iPhone). */
+  | { status: "done"; filename: string; file: File }
   | { status: "error"; message: string };
 
 function filenameFrom(header: string | null) {
@@ -28,12 +29,21 @@ function saveBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(href), 30_000);
 }
 
-export function useFileDownload() {
+interface DownloadCallbacks {
+  /** Runs even while the screen is hidden behind another tab, unlike an effect. */
+  onDone?: (filename: string) => void;
+  onError?: () => void;
+}
+
+export function useFileDownload({ onDone, onError }: DownloadCallbacks = {}) {
   const [state, setState] = useState<DownloadState>({ status: "idle" });
   const controller = useRef<AbortController | null>(null);
+  const callbacks = useRef({ onDone, onError });
+  useLayoutEffect(() => {
+    callbacks.current = { onDone, onError };
+  });
 
-  useEffect(() => () => controller.current?.abort(), []);
-
+  // No abort on unmount: a tab switch hides this screen, and the download should finish anyway.
   const start = useCallback(async (token: string) => {
     controller.current?.abort();
     const ctrl = new AbortController();
@@ -45,6 +55,7 @@ export function useFileDownload() {
       if (!res.ok || !res.body) {
         const data = (await res.json().catch(() => null)) as ApiErrorBody | null;
         setState({ status: "error", message: data?.error.message ?? "File gagal disiapkan. Coba lagi." });
+        callbacks.current.onError?.();
         return;
       }
 
@@ -68,12 +79,19 @@ export function useFileDownload() {
       }
 
       const filename = filenameFrom(res.headers.get("content-disposition"));
-      saveBlob(new Blob(chunks, { type: res.headers.get("content-type") ?? undefined }), filename);
-      setState({ status: "done", filename });
+      const type = res.headers.get("content-type") ?? "application/octet-stream";
+      const file = new File(chunks, filename, { type });
+      saveBlob(file, filename);
+      setState({ status: "done", filename, file });
+      callbacks.current.onDone?.(filename);
     } catch (error) {
       if (ctrl.signal.aborted) return;
       console.error(error);
-      setState({ status: "error", message: "Unduhan terputus. Periksa koneksi lalu coba lagi." });
+      setState({
+        status: "error",
+        message: navigator.onLine ? "Unduhan terputus. Periksa koneksi lalu coba lagi." : "Koneksi terputus saat mengunduh. Sambungkan internet lalu coba lagi.",
+      });
+      callbacks.current.onError?.();
     }
   }, []);
 

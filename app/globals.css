@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./app-shell.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
@@ -123,8 +124,11 @@
       color 180ms ease;
   }
 
-  .neu-btn:hover:not(:disabled) {
-    color: var(--accent-text);
+  /* Touch screens keep :hover after a tap, which would read as a selected state. */
+  @media (hover: hover) {
+    .neu-btn:hover:not(:disabled) {
+      color: var(--accent-text);
+    }
   }
 
   .neu-btn:active:not(:disabled) {

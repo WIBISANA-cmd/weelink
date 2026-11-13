@@ -12,6 +12,7 @@ Dibangun dengan Next.js 16 (App Router, Cache Components), React 19, TypeScript,
 
 - [Screenshot](#screenshot)
 - [Fitur](#fitur)
+- [Aplikasi (PWA)](#aplikasi-pwa)
 - [Platform yang didukung](#platform-yang-didukung)
 - [Menjalankan secara lokal](#menjalankan-secara-lokal)
 - [Konfigurasi](#konfigurasi)
@@ -52,6 +53,24 @@ Desktop memakai dua kolom: form tetap di kiri, hasil di kanan.
 - **Progress unduhan** di dalam tombol Simpan, dan bisa dibatalkan.
 - **Bagikan ke WeeLink.** Setelah dipasang sebagai aplikasi (PWA) di Android, WeeLink muncul di menu Bagikan aplikasi lain.
 - **Mode terang dan gelap**, mengikuti sistem secara default, dengan toggle yang tersimpan per perangkat.
+- **Aplikasi yang bisa dipasang (PWA).** Lihat [Aplikasi (PWA)](#aplikasi-pwa).
+
+## Aplikasi (PWA)
+
+WeeLink bisa dipasang di Android, iPhone/iPad, Windows, macOS, dan ChromeOS, lalu berjalan di jendelanya sendiri.
+
+- **Splash saat dibuka.** Sekali per sesi (setiap kali aplikasi terpasang dibuka dari nol): huruf W tergambar di atas tombol biru, tombolnya tertekan sekali, lalu bar di bawahnya penuh begitu aplikasi siap. Splash ada di HTML, jadi tampil sebelum JavaScript jalan, dan tetap menyingkir sendiri setelah 6 detik kalau JavaScript gagal.
+- **Tiga layar dengan tab.** Unduh, Riwayat, Pengaturan. Di ponsel tab ada di bawah, mulai 1024px pindah ke rail di kiri seperti sidebar aplikasi desktop. Pindah tab tidak menghapus hasil di layar Unduh, dan unduhan yang sedang jalan tetap selesai.
+- **Riwayat** link yang berhasil dibaca (maksimal 60, hanya di perangkat ini, tanpa server). Ketuk untuk membaca ulang, geser ke kiri untuk menghapus (ada Urungkan), atau buka menu Opsi untuk salin link dan buka postingan asli.
+- **Pengaturan:** tema (terang, gelap, ikuti sistem), getar, notifikasi saat file siap, pasang aplikasi, periksa pembaruan, ukuran dan hapus data offline, hapus riwayat.
+- **Offline.** Keempat layar disimpan oleh service worker saat pertama dibuka. Tanpa internet, Riwayat dan Pengaturan tetap terbuka, dan alamat yang belum pernah dibuka menampilkan layar Offline. Membaca link dan mengunduh tetap butuh internet.
+- **Pembaruan.** Setiap build punya ID sendiri. Aplikasi yang sedang terbuka memeriksa versi baru saat kembali ke depan (paling sering 30 menit sekali) dan menampilkan "Versi baru WeeLink siap dipakai" dengan tombol Muat ulang.
+- **Pasang.** Di Chrome dan Edge, tombol Pasang muncul di bar atas. Di Safari (iPhone, iPad, Mac) tombol itu membuka petunjuk langkah demi langkah. Ajakan memasang muncul sekali saja, setelah file pertama tersimpan.
+- **Bagikan file.** Setelah tersimpan, tombol Bagikan membuka menu bagikan sistem. Di iPhone itu cara menaruh video ke Foto (Simpan Video).
+- **Sentuhan aplikasi:** getar singkat saat link terbaca, file tersimpan, atau error (Android); notifikasi saat file selesai ketika aplikasi tidak sedang dibuka; warna status bar dan title bar mengikuti tema; di desktop terpasang, WeeLink menggambar title bar sendiri (Window Controls Overlay).
+- **Pintasan keyboard:** Ctrl+V (⌘V) di mana saja pada layar Unduh langsung membaca link; Alt+1, Alt+2, Alt+3 pindah layar.
+
+Service worker hanya aktif di build produksi (`npm run build && npm start`). Untuk mencobanya saat `npm run dev`, isi `NEXT_PUBLIC_PWA_DEV=1`. Isi `WEELINK_BUILD_ID` (misalnya hash commit) saat build kalau ingin ID versi yang bisa ditelusuri; tanpa itu ID diambil dari waktu build.
 - **Tanpa login, tanpa database.** Pilihan unduhan dibawa sebagai token bertanda tangan, dan file sementara dihapus begitu selesai dikirim.
 
 ## Platform yang didukung
@@ -91,7 +110,7 @@ yt-dlp perlu diperbarui berkala karena platform sering berubah. Jalankan `npm ru
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Pemeriksaan tipe TypeScript |
 | `npm run setup` | Unduh atau perbarui yt-dlp ke `./bin` dan pasang Chromium headless untuk Threads |
-| `npm run icons:render` | Render ikon PWA PNG dari `public/icon.svg` |
+| `npm run icons:render` | Render ikon PWA (biasa, maskable, badge notifikasi, ikon iOS) dari tanda W |
 | `npm run docs:capture` | Ambil ulang screenshot dan GIF demo |
 
 ## Konfigurasi
@@ -164,11 +183,21 @@ wee-link/
 │   │   ├── download/route.ts      GET: verifikasi token, stream file
 │   │   └── health/route.ts        GET: cek yt-dlp dan ffmpeg (healthcheck)
 │   ├── globals.css                Design token, komponen neumorphic, animasi
-│   ├── layout.tsx                 Font, metadata, script tema anti-flash
-│   ├── page.tsx                   Halaman tunggal
-│   ├── manifest.ts                Manifest PWA + share target
+│   ├── app-shell.css              Splash, tab bar, rail, sheet, toast, transisi layar
+│   ├── layout.tsx                 Font, metadata, script tema dan boot, app shell
+│   ├── page.tsx                   Layar Unduh
+│   ├── riwayat/page.tsx           Layar Riwayat
+│   ├── pengaturan/page.tsx        Layar Pengaturan
+│   ├── offline/page.tsx           Layar cadangan saat offline
+│   ├── sw-version.js/route.ts     ID build untuk service worker
+│   ├── manifest.ts                Manifest PWA, shortcut, screenshot, share target
+│   ├── apple-icon.png             Ikon Layar Utama iOS
 │   └── icon.svg                   Favicon
 ├── components/
+│   ├── app/                       App shell: tab bar, rail, app bar, pintasan, transisi
+│   ├── pwa/                       Splash, status PWA, pasang, pembaruan, toast
+│   ├── history/                   Layar Riwayat dan konfirmasi hapus
+│   ├── settings/                  Layar Pengaturan
 │   ├── downloader/
 │   │   ├── downloader.tsx         Orkestrator: form di kiri, hasil di kanan
 │   │   ├── shared-link-downloader.tsx  Membaca ?text= dari menu Bagikan
@@ -178,8 +207,8 @@ wee-link/
 │   │   ├── result-card.tsx        Pratinjau, pilihan item, format, kualitas
 │   │   ├── option-picker.tsx      Keycap format dan kualitas (radio native)
 │   │   └── save-button.tsx        Tombol Simpan dengan progress
-│   ├── site/                      Header dan footer
-│   └── ui/                        Ikon, logo platform, toggle tema
+│   ├── site/                      Footer
+│   └── ui/                        Ikon, logo platform, toggle tema, sheet, switch
 ├── hooks/
 │   ├── use-media-resolver.ts      State machine baca link, bisa dibatalkan
 │   └── use-file-download.ts       Unduh dengan progress, simpan sebagai file
@@ -187,7 +216,13 @@ wee-link/
 │   ├── platforms.ts               Daftar platform, deteksi, ekstraksi URL
 │   ├── types.ts                   Tipe bersama client dan server
 │   ├── format.ts                  Format ukuran, durasi, label
-│   ├── theme.ts                   Kunci storage dan script tema
+│   ├── theme.ts                   Kunci storage, script tema, mode sistem
+│   ├── pwa.ts                     Script boot, ID build, deteksi platform
+│   ├── local-store.ts             localStorage yang bisa di-subscribe React
+│   ├── history.ts                 Data riwayat
+│   ├── settings.ts                Pengaturan dan getar
+│   ├── notify.ts                  Notifikasi file siap
+│   ├── toast.ts                   Antrean toast
 │   └── server/                    Hanya dipakai di server
 │       ├── resolve.ts             Alur baca link + fallback
 │       ├── ytdlp.ts               Menjalankan yt-dlp, antrean, pemetaan error
@@ -206,7 +241,7 @@ wee-link/
 │   ├── setup-yt-dlp.mjs           Unduh binary yt-dlp
 │   ├── render-icons.mjs           Render ikon PWA PNG
 │   └── capture-docs.mjs           Screenshot dan GIF untuk README
-├── public/                        icon.svg dan icons/ (PNG PWA)
+├── public/                        sw.js (service worker), icon.svg, icons/, screenshots/ (dialog pasang)
 ├── docker/
 │   ├── entrypoint.sh              Perbarui yt-dlp lalu jalankan server
 │   └── Caddyfile                  Reverse proxy + HTTPS otomatis
@@ -323,6 +358,8 @@ Pasang di belakang reverse proxy (Nginx, Caddy). Rate limit membaca `x-forwarded
 - **Ikon** digambar sendiri dalam gaya isi (filled) agar menyatu dengan permukaan neumorphic. Logo platform diambil dari [Simple Icons](https://simpleicons.org/).
 - **Gerak punya tujuan:** tombol tenggelam saat ditekan (umpan balik sentuh), kartu hasil naik dari permukaan (menyambung gerakan tombol yang baru ditekan), keycap tenggelam saat dipilih, progress mengisi tombol Simpan. Titik memuat hanya bergerak selama permintaan berjalan. Semua animasi mati di bawah `prefers-reduced-motion`.
 - **Layout tiga tahap:** satu kolom di ponsel, satu kolom terpusat (maks. 36rem) di tablet, dua kolom mulai 1024px.
+- **App shell memakai motif yang sama.** Tab adalah keycap di satu pelat timbul; satu sumur cekung meluncur ke tab aktif, jadi pindah layar terbaca sebagai menekan tombol lain. Splash memakai tombol yang sama: W tergambar, tombol tertekan sekali. Sheet dan toast naik dari permukaan seperti kartu hasil.
+- **Arah gerak punya arti.** Tab di kanan masuk dari kanan, tab di kiri dari kiri, sementara bar atas, tab bar, dan rail diam sebagai jangkar. Back browser dan refresh tidak bergerak. Semua mati di bawah `prefers-reduced-motion`; splash lalu hanya memudar.
 
 **Catatan (antislop R-12):** neumorphism memberi bayangan pada hampir semua elemen, dan itu bertabrakan dengan pola "bayangan lembut di mana-mana". Gaya ini dipertahankan karena diminta secara eksplisit sebagai identitas produk, dengan syarat setiap bayangan membawa makna timbul atau cekung seperti dijelaskan di atas.
 
@@ -359,6 +396,8 @@ Wordmark "WeeLink" berupa teks. `app/icon.svg` dan ikon PWA (huruf W di kotak bi
 - **Rate limit dan antrean ada di memori proses.** Kalau server di-restart, keduanya kembali ke nol, dan dengan beberapa instance batasnya berlaku per instance.
 - **Penjaga SSRF memeriksa nama host, bukan hasil DNS.** Domain publik yang mengarah ke IP privat tidak tertangkap. Jalankan server di jaringan yang tidak bisa menjangkau layanan internal yang sensitif.
 - **Threads bergantung pada tampilan halamannya.** WeeLink membaca postingan utama dari struktur halaman Threads; kalau Meta mengubah tampilannya, pembacaan bisa gagal dan perlu disesuaikan. Ketentuan layanan Meta juga melarang pengambilan data otomatis, jadi IP server bisa saja dibatasi. Matikan dengan `THREADS_RENDER=0` kalau tidak ingin mengambil risiko itu.
+- **iPhone dan iPad punya batas PWA sendiri.** Getar tidak didukung Safari, notifikasi hanya tersedia setelah WeeLink ditambahkan ke Layar Utama, dan menu Bagikan sistem tidak bisa menampilkan WeeLink (share target hanya di Android).
+- **Riwayat dan pengaturan ada di localStorage.** Menghapus data situs di browser ikut menghapusnya, dan di mode privat keduanya hanya bertahan selama tab terbuka.
 - **Platform berubah-ubah.** Kalau sebuah platform mendadak gagal, langkah pertama selalu memperbarui yt-dlp (`npm run setup`).
 
 ## Memperbarui screenshot dan GIF

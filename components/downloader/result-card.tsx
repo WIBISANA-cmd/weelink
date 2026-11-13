@@ -3,8 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { FilmIcon } from "@/components/ui/icons";
 import { PlatformMark } from "@/components/ui/platform-mark";
+import { nudgeInstallOnce } from "@/components/pwa/pwa-store";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { formatDuration, optionLabel } from "@/lib/format";
+import { recordSaved } from "@/lib/history";
+import { notifyFileReady } from "@/lib/notify";
+import { haptic } from "@/lib/settings";
 import { PLATFORMS } from "@/lib/platforms";
 import type { MediaEntry, MediaInfo, MediaMode } from "@/lib/types";
 import { ModeSwitch, QualityKeys } from "./option-picker";
@@ -89,14 +93,26 @@ export function ResultCard({ media, onAnother }: ResultCardProps) {
   const [optionId, setOptionId] = useState<string | undefined>(options[0]?.id);
   const option = options.find((o) => o.id === optionId) ?? options[0];
 
-  const download = useFileDownload();
+  const savingLabel = useRef("");
+  const download = useFileDownload({
+    onDone: (filename) => {
+      recordSaved(media.sourceUrl, savingLabel.current);
+      haptic("success");
+      notifyFileReady(filename);
+      nudgeInstallOnce();
+    },
+    onError: () => haptic("error"),
+  });
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const announced = useRef(false);
   const platformName = PLATFORMS.find((p) => p.id === media.platform)?.name;
 
   // Move focus to the result so keyboard and screen reader users land where the content appeared.
+  // Once only: coming back to this tab re-runs effects, and that must not yank focus or scroll.
   useEffect(() => {
     const heading = headingRef.current;
-    if (!heading) return;
+    if (!heading || announced.current) return;
+    announced.current = true;
     heading.focus({ preventScroll: true });
     const singleColumn = !matchMedia("(min-width: 1024px)").matches;
     if (singleColumn && heading.getBoundingClientRect().top > window.innerHeight * 0.6) {
@@ -142,7 +158,11 @@ export function ResultCard({ media, onAnother }: ResultCardProps) {
         {option && (
           <>
             <QualityKeys name="quality" options={options} value={option.id} onChange={pickOption} />
-            <SaveButton label={optionLabel(option)} state={download.state} onSave={() => download.start(option.token)} onCancel={download.cancel} />
+            <SaveButton label={optionLabel(option)} state={download.state} onSave={() => {
+                savingLabel.current = optionLabel(option);
+                haptic("tap");
+                download.start(option.token);
+              }} onCancel={download.cancel} />
           </>
         )}
       </div>

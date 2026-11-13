@@ -9,7 +9,7 @@ export function EmptyPanel() {
       </span>
       <div>
         <h2 className="text-lg font-bold">Hasilnya muncul di sini</h2>
-        <p className="mt-1 max-w-xs text-sm text-muted">Tempel link postingan publik di kolom kiri, lalu tekan Ambil media.</p>
+        <p className="mt-1 max-w-xs text-sm text-muted">Tempel link postingan publik di kolom kiri, atau tekan Ctrl+V (⌘V di Mac) di mana saja di layar ini.</p>
       </div>
     </div>
   );

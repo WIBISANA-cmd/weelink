@@ -1,0 +1,882 @@
+/*
+ * App shell (PWA). Imported by globals.css after the design tokens.
+ * Same single material as the rest of WeeLink: the tab plate and rail are raised because
+ * they are pressable; the well under the active tab is the one sunken key.
+ */
+
+@layer base {
+  /* Installed apps don't rubber-band past the content or show a pull-to-refresh glow. */
+  html[data-standalone] {
+    overscroll-behavior-y: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--edge) transparent;
+  }
+
+  html:has(dialog[open]) {
+    overflow: hidden;
+  }
+
+  /* Controls react on touch without the double-tap zoom delay, and app chrome is not text to select. */
+  button,
+  [role="button"],
+  .neu-btn,
+  .neu-primary,
+  .neu-key,
+  .nav-key,
+  .appbar,
+  .rail,
+  .titlebar {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+.app {
+  min-height: 100dvh;
+}
+
+.app-column {
+  display: flex;
+  min-width: 0;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  /* Room for the docked tab bar. */
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  .app-content {
+    padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+  }
+}
+
+/* Phone and tablet top bar. Flat on the page until content scrolls under it. */
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: calc(env(safe-area-inset-top) + 0.625rem) max(1rem, env(safe-area-inset-right)) 0.625rem
+    max(1rem, env(safe-area-inset-left));
+  background: var(--surface);
+  transition: box-shadow 220ms ease;
+  view-transition-name: appbar;
+}
+
+.appbar[data-scrolled] {
+  box-shadow: 0 8px 16px -10px rgb(var(--shade) / var(--shade-a));
+}
+
+@media (min-width: 640px) {
+  .appbar {
+    padding-inline: max(1.5rem, env(safe-area-inset-left)) max(1.5rem, env(safe-area-inset-right));
+  }
+}
+
+/* ---------- Tab keys ---------- */
+
+.nav-plate {
+  position: relative;
+  border-radius: 1.5rem;
+  background: var(--surface);
+  box-shadow: var(--raise);
+  padding: 0.375rem;
+}
+
+.nav-keys {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--count), minmax(0, 1fr));
+}
+
+/* The one pressed-in key. It slides with a slight overshoot, like a key settling. */
+.nav-well {
+  position: absolute;
+  top: 0.375rem;
+  bottom: 0.375rem;
+  left: 0.375rem;
+  width: calc((100% - 0.75rem) / var(--count));
+  border-radius: 1.125rem;
+  box-shadow: var(--sink-sm);
+  transform: translateX(calc(var(--active) * 100%));
+  transition: transform 440ms cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+
+.nav-key {
+  display: flex;
+  min-height: 3.75rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  border-radius: 1.125rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: color 200ms ease;
+}
+
+/* Hover only where a pointer can hover; on touch it would stick after a tap. */
+@media (hover: hover) {
+  .nav-key:hover {
+    color: var(--ink);
+  }
+}
+
+.nav-key[aria-current="page"] {
+  color: var(--accent-text);
+}
+
+.nav-icon {
+  display: grid;
+  transition: transform 160ms var(--ease-press);
+}
+
+.nav-key:active .nav-icon {
+  transform: scale(0.88);
+}
+
+.nav-key[aria-current="page"] .nav-icon {
+  animation: nav-press 380ms var(--ease-press);
+}
+
+@keyframes nav-press {
+  0% {
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Docked at the bottom on phones and tablets, inside the safe area. */
+.tabbar {
+  position: fixed;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  left: max(0.75rem, env(safe-area-inset-left));
+  z-index: 30;
+  margin-inline: auto;
+  max-width: 28rem;
+  view-transition-name: tabbar;
+}
+
+/* ---------- Desktop rail ---------- */
+
+.rail,
+.titlebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .app {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr);
+  }
+
+  .rail {
+    position: sticky;
+    top: 0;
+    display: flex;
+    height: 100dvh;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    padding: 1.5rem 0;
+    view-transition-name: rail;
+  }
+
+  .rail-nav .nav-plate {
+    width: 5.25rem;
+  }
+
+  .rail-nav .nav-keys {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+
+  .rail-nav .nav-well {
+    right: 0.375rem;
+    bottom: auto;
+    width: auto;
+    height: calc((100% - 0.75rem - (var(--count) - 1) * 0.25rem) / var(--count));
+    transform: translateY(calc(var(--active) * (100% + 0.25rem)));
+  }
+
+  .rail-nav .nav-key {
+    min-height: 4.25rem;
+    font-size: 0.6875rem;
+  }
+
+  .appbar,
+  .tabbar {
+    display: none;
+  }
+
+  .app-content {
+    padding: 0 2.5rem 2.5rem 1rem;
+  }
+}
+
+/* Installed desktop app with its own title bar: the window controls sit over the top-right,
+ * so a draggable strip in the surface color replaces the browser frame. */
+@media (display-mode: window-controls-overlay) {
+  .titlebar {
+    position: fixed;
+    top: env(titlebar-area-y, 0);
+    left: env(titlebar-area-x, 0);
+    z-index: 40;
+    display: flex;
+    width: env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, 2.25rem);
+    align-items: center;
+    padding-inline: 1rem;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    app-region: drag;
+    -webkit-app-region: drag;
+  }
+
+  .app {
+    padding-top: env(titlebar-area-height, 0);
+  }
+
+  .rail {
+    top: env(titlebar-area-height, 0);
+    height: calc(100dvh - env(titlebar-area-height, 0px));
+  }
+}
+
+/* ---------- Splash ---------- */
+
+.splash {
+  display: none;
+}
+
+html[data-splash] {
+  overflow: hidden;
+}
+
+html[data-splash] .splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  /* If the app never hydrates, the splash still steps aside. */
+  animation: splash-out 400ms ease 6s forwards;
+}
+
+html[data-splash="out"] .splash {
+  animation: splash-out 480ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.splash-key {
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: 1.875rem;
+  padding: 0.75rem;
+  background: var(--primary);
+  box-shadow:
+    var(--raise),
+    inset 2px 2px 3px var(--primary-hi),
+    inset -3px -3px 6px var(--primary-press);
+  animation:
+    splash-key-in 520ms var(--ease-press) both,
+    splash-press 340ms ease-in-out 800ms;
+}
+
+.splash-w {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: splash-draw 640ms cubic-bezier(0.65, 0, 0.35, 1) 180ms forwards;
+}
+
+.splash-word {
+  margin-top: 1.75rem;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  animation: splash-rise 480ms var(--ease-press) 440ms both;
+}
+
+.splash-track {
+  position: relative;
+  margin-top: 2.25rem;
+  width: 7.5rem;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  box-shadow: var(--sink-sm);
+  animation: splash-rise 480ms var(--ease-press) 540ms both;
+}
+
+/* Loads toward 85% on its own; the last stretch only fills once the app is actually ready. */
+.splash-fill,
+.splash-track::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--primary);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.splash-fill {
+  animation: splash-load 2.4s cubic-bezier(0.15, 0.75, 0.3, 1) 560ms forwards;
+}
+
+.splash-track::after {
+  content: "";
+}
+
+html[data-splash="done"] .splash-track::after,
+html[data-splash="out"] .splash-track::after {
+  animation: splash-complete 240ms ease-out forwards;
+}
+
+@keyframes splash-key-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+    box-shadow: none;
+  }
+}
+
+@keyframes splash-press {
+  50% {
+    transform: scale(0.94);
+    box-shadow:
+      var(--sink-sm),
+      inset 4px 4px 8px var(--primary-press),
+      inset -3px -3px 6px var(--primary-hi);
+  }
+}
+
+@keyframes splash-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes splash-load {
+  to {
+    transform: scaleX(0.85);
+  }
+}
+
+@keyframes splash-complete {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes splash-out {
+  to {
+    opacity: 0;
+    transform: scale(1.04);
+    visibility: hidden;
+  }
+}
+
+/* The shell settles in as the splash lifts: content rises, the dock and rail slide into place. */
+html[data-splash="out"] .app-content {
+  animation: shell-content 520ms var(--ease-press) 60ms both;
+}
+
+html[data-splash="out"] .tabbar {
+  animation: shell-dock 560ms var(--ease-press) 120ms both;
+}
+
+html[data-splash="out"] .rail {
+  animation: shell-rail 560ms var(--ease-press) 80ms both;
+}
+
+@keyframes shell-content {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes shell-dock {
+  from {
+    opacity: 0;
+    transform: translateY(130%);
+  }
+}
+
+@keyframes shell-rail {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+/* ---------- Sheet / dialog ---------- */
+
+.sheet {
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.sheet[open] {
+  display: grid;
+  align-items: end;
+  justify-items: center;
+}
+
+.sheet::backdrop {
+  background: rgb(var(--shade) / 0.5);
+  animation: fade-in 240ms ease both;
+}
+
+.sheet[data-closing]::backdrop {
+  animation: fade-out 220ms ease both;
+}
+
+.sheet-panel {
+  width: 100%;
+  max-width: 32rem;
+  max-height: min(88dvh, 44rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 1.75rem 1.75rem 0 0;
+  padding: 0 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+  animation: sheet-in 400ms var(--ease-press) both;
+  transition: translate 260ms var(--ease-press);
+}
+
+.sheet[data-closing] .sheet-panel {
+  animation: sheet-out 220ms ease-in both;
+}
+
+/* The whole header is a drag handle on touch screens. */
+.sheet-grip {
+  padding-top: 0.625rem;
+  touch-action: none;
+}
+
+.sheet-handle {
+  display: block;
+  width: 2.75rem;
+  height: 0.3125rem;
+  margin: 0 auto 0.875rem;
+  border-radius: 999px;
+  box-shadow: var(--sink-sm);
+}
+
+@media (min-width: 1024px) {
+  .sheet[open] {
+    align-items: center;
+  }
+
+  .sheet-panel {
+    border-radius: 1.75rem;
+    padding-bottom: 1.5rem;
+    animation-name: dialog-in;
+  }
+
+  .sheet[data-closing] .sheet-panel {
+    animation-name: dialog-out;
+  }
+
+  .sheet-handle {
+    display: none;
+  }
+
+  .sheet-grip {
+    padding-top: 1.5rem;
+    touch-action: auto;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- Toasts ---------- */
+
+.toaster {
+  pointer-events: none;
+  position: fixed;
+  right: 0;
+  bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  left: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  padding-inline: 0.75rem;
+}
+
+.toaster ol {
+  width: 100%;
+  max-width: 26rem;
+}
+
+@media (min-width: 1024px) {
+  .toaster {
+    bottom: 1.5rem;
+    left: 7rem;
+  }
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 1.25rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+  touch-action: pan-y;
+  animation: toast-in 380ms var(--ease-press) both;
+  transition:
+    translate 220ms var(--ease-press),
+    opacity 220ms ease;
+}
+
+.toast[data-leaving="down"] {
+  animation: toast-out-down 200ms ease-in both;
+}
+
+.toast[data-leaving="left"] {
+  animation: toast-out-left 200ms ease-in both;
+}
+
+.toast[data-leaving="right"] {
+  animation: toast-out-right 200ms ease-in both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+    box-shadow: none;
+  }
+}
+
+@keyframes toast-out-down {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+@keyframes toast-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+}
+
+@keyframes toast-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+}
+
+/* ---------- Switch ---------- */
+
+/* 44px tall hit area; the visible track sits inside it. */
+.neu-switch {
+  position: relative;
+  display: inline-block;
+  width: 3.75rem;
+  height: 2.75rem;
+}
+
+.neu-switch::before {
+  content: "";
+  position: absolute;
+  inset: 0.375rem 0;
+  border: 1px solid color-mix(in oklab, var(--edge) 55%, transparent);
+  border-radius: 999px;
+  box-shadow: var(--sink-sm);
+  transition: border-color 200ms ease;
+}
+
+.neu-switch-knob {
+  position: absolute;
+  top: 0.625rem;
+  left: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--raise-sm);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.36, 0.64, 1),
+    width 160ms var(--ease-press),
+    background-color 200ms ease,
+    border-color 200ms ease;
+}
+
+.neu-switch:active:not(:disabled) .neu-switch-knob {
+  width: 1.75rem;
+}
+
+.neu-switch[aria-checked="true"]::before {
+  border-color: var(--accent-text);
+}
+
+.neu-switch[aria-checked="true"] .neu-switch-knob {
+  transform: translateX(1.75rem);
+  border-color: var(--primary-press);
+  background: var(--primary);
+  box-shadow:
+    var(--raise-sm),
+    inset 1px 1px 2px var(--primary-hi),
+    inset -2px -2px 4px var(--primary-press);
+}
+
+.neu-switch[aria-checked="true"]:active:not(:disabled) .neu-switch-knob {
+  transform: translateX(1.5rem);
+}
+
+.neu-switch:disabled::before {
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.neu-switch:disabled .neu-switch-knob {
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+/* ---------- Riwayat ---------- */
+
+.history-item {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 220ms var(--ease-press),
+    opacity 220ms ease;
+}
+
+.history-item[data-removing] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.history-item + .history-item .history-swipe {
+  border-top: 1px solid color-mix(in oklab, var(--edge) 22%, transparent);
+}
+
+.history-swipe {
+  --reveal: 0;
+  position: relative;
+}
+
+.history-swipe-bg {
+  position: absolute;
+  inset: 0.25rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-right: 1.25rem;
+  border-radius: 1.125rem;
+  box-shadow: var(--sink-sm);
+  color: var(--danger);
+  font-size: 0.875rem;
+  font-weight: 700;
+  opacity: var(--reveal);
+}
+
+.history-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem 0.25rem 0;
+  border-radius: 1.125rem;
+  background: var(--surface);
+  touch-action: pan-y;
+  transition: translate 280ms var(--ease-press);
+}
+
+.history-link {
+  display: flex;
+  min-width: 0;
+  min-height: 3.75rem;
+  flex: 1;
+  align-items: center;
+  gap: 0.875rem;
+  border-radius: 1rem;
+  padding: 0.5rem;
+  transition:
+    box-shadow 180ms var(--ease-press),
+    color 180ms ease;
+}
+
+@media (hover: hover) {
+  .history-link:hover {
+    color: var(--accent-text);
+  }
+}
+
+.history-link:active {
+  box-shadow: var(--sink-sm);
+}
+
+/* ---------- Pengaturan ---------- */
+
+.settings-row {
+  padding-block: 1rem;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid color-mix(in oklab, var(--edge) 22%, transparent);
+}
+
+/* ---------- Screen transitions ---------- */
+
+::view-transition {
+  pointer-events: none;
+}
+
+/* The chrome is the spatial anchor: only the screen moves. */
+::view-transition-group(appbar),
+::view-transition-group(tabbar),
+::view-transition-group(rail) {
+  z-index: 100;
+  animation: none;
+}
+
+::view-transition-old(appbar),
+::view-transition-old(tabbar),
+::view-transition-old(rail) {
+  display: none;
+}
+
+::view-transition-new(appbar),
+::view-transition-new(tabbar),
+::view-transition-new(rail) {
+  animation: none;
+}
+
+::view-transition-old(.nav-forward) {
+  --slide-offset: -48px;
+  animation:
+    150ms ease-in both vt-fade reverse,
+    380ms var(--ease-press) both vt-slide reverse;
+}
+
+::view-transition-new(.nav-forward) {
+  --slide-offset: 48px;
+  animation:
+    220ms ease-out 120ms both vt-fade,
+    380ms var(--ease-press) both vt-slide;
+}
+
+::view-transition-old(.nav-back) {
+  --slide-offset: 48px;
+  animation:
+    150ms ease-in both vt-fade reverse,
+    380ms var(--ease-press) both vt-slide reverse;
+}
+
+::view-transition-new(.nav-back) {
+  --slide-offset: -48px;
+  animation:
+    220ms ease-out 120ms both vt-fade,
+    380ms var(--ease-press) both vt-slide;
+}
+
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-slide {
+  from {
+    translate: var(--slide-offset);
+  }
+  to {
+    translate: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+
+  /* The splash still appears, but only fades: the W is drawn from the start. */
+  .splash-w {
+    stroke-dashoffset: 0;
+  }
+}
